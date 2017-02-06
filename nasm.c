@@ -84,8 +84,18 @@ void run(char* var) {
 	int length = strlen(var);
 	char* data = cut(var, ".data");
 	char* code = cut(var, ".code");
-	printf("DATA: (%d line(s))\n\n%s\n\n", lines(data), data);
-	printf("CODE: (%d line(s))\n\n%s\n\n", lines(code), code);
+	int dataLines = lines(data);
+	printf("DATA: [%d line(s)]\n\n", dataLines);
+	for (int i = 0; i < dataLines; i++)
+		printf("L%3d: %s\n", i + 1, line(data, i));
+	printf("\n");
+	
+	int codeLines = lines(code);
+	printf("CODE: [%d line(s)]\n\n", codeLines);
+	for (int i = 0; i < codeLines; i++)
+		printf("L%3d: %s\n", i + 1, line(code, i));
+	printf("\n");
+	
 	printf("NASM running finished.\n\n");
 }
 
@@ -124,6 +134,10 @@ char* cut(char* src, const char* head) {
 				if (i == size - 1) {
 					buf[i] = '\0';
 					break;
+				}
+				if (i == 0 && bodyBuf[i] == '\n') {
+					cnt += 1;
+					continue;
 				}
 				if (bodyBuf[i] == ' ' && bodyBuf[i - 1] == ' ') {
 					cnt += 1;
@@ -173,7 +187,45 @@ int lines(char* src) {
 }
 
 char* line(char* src, int index) {
-	
+	if (index >= lines(src)) return 0;
+	int srcLen = strlen(src), cnt = 0, pos = 0;
+	char* buf = malloc(sizeof(char) * srcLen);
+	char* result = 0;
+	for (int i = 0; i < srcLen; i++) {
+		if (index == 0) {
+			for (i = 0; src[i] != '\n'; i++)
+				buf[i] = src[i];
+			pos = i + 1;
+			result = malloc(sizeof(char) * (pos));
+			for (i = 0; i < pos; i++) {
+				if (i == pos - 1) {
+					result[i] = '\0';
+					break;
+				}
+				result[i] = buf[i];
+			}
+			free(buf);
+			return result;
+		}
+		if (index == cnt) {
+			pos = i;
+			for (; src[i] != '\n'; i++)
+				buf[i - pos] = src[i];
+			pos = i - pos + 1;
+			result = malloc(sizeof(char) * pos);
+			for (i = 0; i < pos; i++) {
+				if (i == pos - 1) {
+					result[i] = '\0';
+					break;
+				}
+				result[i] = buf[i];
+			}
+			free(buf);
+			return result;
+		}
+		if (src[i] == '\n') cnt += 1;
+	}
+	return 0;
 }
 
 

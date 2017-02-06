@@ -1,5 +1,5 @@
 .data {
-	var a = 0
+	var a = 123
 	var b = 1.414
 	var c = "hello"
 	str d = "world"
