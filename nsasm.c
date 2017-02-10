@@ -327,6 +327,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt = tmp;
+							reg[drn].type = RegInt;
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -337,16 +347,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 							
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							reg[drn].vInt = tmp;
-							reg[drn].type = RegInt;
 						}
 					}
 				} else return 1;
@@ -417,6 +417,15 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							print("%d", tmp);
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -426,15 +435,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 					
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							print("%d", tmp);
 						}
 					}
 					break;
@@ -489,6 +489,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							print("[DEBUG] ");
+							print("%d", tmp);
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -499,16 +509,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 					
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							print("[DEBUG] ");
-							print("%d", tmp);
 						}
 					}
 					break;
@@ -555,6 +555,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt += tmp;
+							reg[drn].type = RegInt;
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -565,16 +575,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 							
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							reg[drn].vInt += tmp;
-							reg[drn].type = RegInt;
 						}
 					}
 				} else return 1;
@@ -646,6 +646,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt -= tmp;
+							reg[drn].type = RegInt;
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -656,16 +666,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 							
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							reg[drn].vInt -= tmp;
-							reg[drn].type = RegInt;
 						}
 					}
 				} else return 1;
@@ -735,6 +735,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt *= tmp;
+							reg[drn].type = RegInt;
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -745,16 +755,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 							
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							reg[drn].vInt *= tmp;
-							reg[drn].type = RegInt;
 						}
 					}
 				} else return 1;
@@ -799,6 +799,16 @@ int execute(char* var, char type) {
 							} else {
 								return 1;
 							}
+						} else if (strchr(src, '.') == 0) {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt /= tmp;
+							reg[drn].type = RegInt;
 						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
 							float tmp = 0;
 							if (sscanf(src, "%f", &tmp)) {
@@ -809,16 +819,6 @@ int execute(char* var, char type) {
 							}
 						} else if (src[0] == '\"') {
 							
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							reg[drn].vInt /= tmp;
-							reg[drn].type = RegInt;
 						}
 					}
 				} else return 1;
