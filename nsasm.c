@@ -5,6 +5,7 @@
 #define VERSION 0.01
 
 typedef enum {
+	RegChar,
     RegInt,
     RegFloat,
     RegPtr
@@ -12,6 +13,7 @@ typedef enum {
 
 typedef struct {
     RegType type;
+    char vChar;
     int vInt;
     float vFloat;
     void* vPtr;
@@ -22,6 +24,7 @@ char* line(char* src, int index);
 char* cut(char* src, const char* head);
 char* get(char* src, int start, char* buf, int size);
 
+int execute(char* var, char type);
 void compile(char* var);
 void run(char* var);
 
@@ -74,6 +77,18 @@ int main(int argc, char* argv[]) {
     }
 }
 
+int execute(char* var, char type) {
+	char head[32] = "\0", dst[32] = "\0", src[64] = "\0";
+	if (type == 'c') {
+		sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", &head, &dst, &src);
+		printf("Operator: %s, Dest: %s, Source: %s\n", &head, &dst, &src);
+	} else if (type == 'd') {
+		sscanf(var, "%s %[^ \t=] %*[= \t]%[^\n]", &head, &dst, &src);
+		printf("Type: %s, Name: %s, Value: %s\n", &head, &dst, &src);
+	}
+	return 0;
+}
+
 void compile(char* var) {
 	if (var == 0) return;
 	printf("Note: Compile module is in coding.\n\n");
@@ -87,16 +102,18 @@ void run(char* var) {
 	int dataLines = lines(data);
 	printf("DATA: [%d line(s)]\n\n", dataLines);
 	for (int i = 0; i < dataLines; i++)
-		printf("L%3d: %s\n", i + 1, line(data, i));
+		//printf("L%3d: %s\n", i + 1, line(data, i));
+		execute(line(data, i), 'd');
 	printf("\n");
 	
 	int codeLines = lines(code);
 	printf("CODE: [%d line(s)]\n\n", codeLines);
 	for (int i = 0; i < codeLines; i++)
-		printf("L%3d: %s\n", i + 1, line(code, i));
+		//printf("L%3d: %s\n", i + 1, line(code, i));
+		execute(line(code, i), 'c');
 	printf("\n");
 	
-	printf("NASM running finished.\n\n");
+	printf("NSASM running finished.\n\n");
 }
 
 char* get(char* src, int start, char* buf, int size) {
