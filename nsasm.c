@@ -206,7 +206,8 @@ typedef struct {
     void* vPtr;
 } Register;
 
-Register reg[8], state;
+#define REG_CNT 8
+Register reg[REG_CNT], state;
 int cnt;
 
 int lines(char* src);
@@ -287,7 +288,71 @@ int execute(char* var, char type) {
 	} else if (type == 'c') {
 		sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", head, dst, src);
 		if (strcmp(strlwr(head), "mov") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									reg[drn].vChar = reg[srn].vChar;
+									reg[drn].type = RegChar;
+									break;
+								case RegFloat:
+									reg[drn].vFloat = reg[srn].vFloat;
+									reg[drn].type = RegFloat;
+									break;
+								case RegInt:
+									reg[drn].vInt = reg[srn].vInt;
+									reg[drn].type = RegInt;
+									break;
+								case RegPtr:
+									reg[drn].vPtr = reg[srn].vPtr;
+									reg[drn].type = RegPtr;
+									break;
+								default:
+									return 1;
+							}
+						}
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								reg[drn].vChar = tmp;
+								reg[drn].type = RegChar;
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								reg[drn].vFloat = tmp;
+								reg[drn].type = RegFloat;
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+							
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt = tmp;
+							reg[drn].type = RegInt;
+						}
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "push") == 0) {
 			
 		} else if (strcmp(strlwr(head), "pop") == 0) {
@@ -321,8 +386,56 @@ int execute(char* var, char type) {
 								else print("%c", src[i]);
 							} else 
 								print("%c", src[i]);
+						}	
+					} else if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									print("%c", reg[srn].vChar);
+									break;
+								case RegFloat:
+									print("%f", reg[srn].vFloat);
+									break;
+								case RegInt:
+									print("%d", reg[srn].vInt);
+									break;
+								case RegPtr:
+									print("%s", reg[srn].vPtr);
+									break;
+								default:
+									return 1;
+							}
 						}
-							
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								print("%c", tmp);
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								print("%f", tmp);
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+					
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							print("%d", tmp);
+						}
 					}
 					break;
 				case 0xFF:
@@ -340,25 +453,378 @@ int execute(char* var, char type) {
 								else print("%c", src[i]);
 							} else 
 								print("%c", src[i]);
+						}	
+					} else if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									print("[DEBUG] ");
+									print("%c", reg[srn].vChar);
+									break;
+								case RegFloat:
+									print("[DEBUG] ");
+									print("%f", reg[srn].vFloat);
+									break;
+								case RegInt:
+									print("[DEBUG] ");
+									print("%d", reg[srn].vInt);
+									break;
+								case RegPtr:
+									print("[DEBUG] ");
+									print("%s", reg[srn].vPtr);
+									break;
+								default:
+									return 1;
+							}
 						}
-							
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								print("[DEBUG] ");
+								print("%c", tmp);
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								print("[DEBUG] ");
+								print("%f", tmp);
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+					
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							print("[DEBUG] ");
+							print("%d", tmp);
+						}
 					}
 					break;
 				default:
 					return 1;
 			}
 		} else if (strcmp(strlwr(head), "add") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									reg[drn].vChar += reg[srn].vChar;
+									reg[drn].type = RegChar;
+									break;
+								case RegFloat:
+									reg[drn].vFloat += reg[srn].vFloat;
+									reg[drn].type = RegFloat;
+									break;
+								case RegInt:
+									reg[drn].vInt += reg[srn].vInt;
+									reg[drn].type = RegInt;
+									break;
+								case RegPtr:
+									reg[drn].vPtr += reg[srn].vInt;
+									reg[drn].type = RegPtr;
+									break;
+								default:
+									return 1;
+							}
+						}
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								reg[drn].vChar += tmp;
+								reg[drn].type = RegChar;
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								reg[drn].vFloat += tmp;
+								reg[drn].type = RegFloat;
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+							
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt += tmp;
+							reg[drn].type = RegInt;
+						}
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "inc") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					switch(reg[drn].type) {
+						case RegChar:
+							reg[drn].vChar += 1;
+							break;
+						case RegFloat:
+							reg[drn].vFloat += 1;
+							break;
+						case RegInt:
+							reg[drn].vInt += 1;
+							break;
+						case RegPtr:
+							reg[drn].vPtr += 1;
+							break;
+						default:
+							return 1;
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "sub") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									reg[drn].vChar -= reg[srn].vChar;
+									reg[drn].type = RegChar;
+									break;
+								case RegFloat:
+									reg[drn].vFloat -= reg[srn].vFloat;
+									reg[drn].type = RegFloat;
+									break;
+								case RegInt:
+									reg[drn].vInt -= reg[srn].vInt;
+									reg[drn].type = RegInt;
+									break;
+								case RegPtr:
+									reg[drn].vPtr -= reg[srn].vInt;
+									reg[drn].type = RegPtr;
+									break;
+								default:
+									return 1;
+							}
+						}
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								reg[drn].vChar -= tmp;
+								reg[drn].type = RegChar;
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								reg[drn].vFloat -= tmp;
+								reg[drn].type = RegFloat;
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+							
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt -= tmp;
+							reg[drn].type = RegInt;
+						}
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "dec") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					switch(reg[drn].type) {
+						case RegChar:
+							reg[drn].vChar -= 1;
+							break;
+						case RegFloat:
+							reg[drn].vFloat -= 1;
+							break;
+						case RegInt:
+							reg[drn].vInt -= 1;
+							break;
+						case RegPtr:
+							reg[drn].vPtr -= 1;
+							break;
+						default:
+							return 1;
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "mul") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									reg[drn].vChar *= reg[srn].vChar;
+									reg[drn].type = RegChar;
+									break;
+								case RegFloat:
+									reg[drn].vFloat *= reg[srn].vFloat;
+									reg[drn].type = RegFloat;
+									break;
+								case RegInt:
+									reg[drn].vInt *= reg[srn].vInt;
+									reg[drn].type = RegInt;
+									break;
+								case RegPtr:
+									return 1;
+								default:
+									return 1;
+							}
+						}
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								reg[drn].vChar *= tmp;
+								reg[drn].type = RegChar;
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								reg[drn].vFloat *= tmp;
+								reg[drn].type = RegFloat;
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+							
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt *= tmp;
+							reg[drn].type = RegInt;
+						}
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "div") == 0) {
-			
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int drn = 0;
+				sscanf(dst, "%*[rR]%d", &drn);
+				if (drn >= 0 && drn < REG_CNT) {
+					if (src[0] == 'r' || src[0] == 'R') {
+						int srn = 0;
+						sscanf(src, "%*[rR]%d", &srn);
+						if (srn >= 0 && srn < REG_CNT) {
+							switch(reg[srn].type) {
+								case RegChar:
+									reg[drn].vChar /= reg[srn].vChar;
+									reg[drn].type = RegChar;
+									break;
+								case RegFloat:
+									reg[drn].vFloat /= reg[srn].vFloat;
+									reg[drn].type = RegFloat;
+									break;
+								case RegInt:
+									reg[drn].vInt /= reg[srn].vInt;
+									reg[drn].type = RegInt;
+									break;
+								case RegPtr:
+									return 1;
+								default:
+									return 1;
+							}
+						}
+					} else {
+						if (src[0] == '\'') {
+							if (src[strlen(src) - 1] != '\'') return 1;
+							char tmp = 0;
+							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
+								reg[drn].vChar /= tmp;
+								reg[drn].type = RegChar;
+							} else {
+								return 1;
+							}
+						} else if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f') {
+							float tmp = 0;
+							if (sscanf(src, "%f", &tmp)) {
+								reg[drn].vFloat /= tmp;
+								reg[drn].type = RegFloat;
+							} else {
+								return 1;
+							}
+						} else if (src[0] == '\"') {
+							
+						} else {
+							int tmp = 0;
+							if (src[1] == 'x' || src[1] == 'X' || 
+							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
+								sscanf(src, "%x", &tmp);
+							} else {
+								sscanf(src, "%d", &tmp);
+							}
+							reg[drn].vInt /= tmp;
+							reg[drn].type = RegInt;
+						}
+					}
+				} else return 1;
+			} else {
+				
+			}
 		} else if (strcmp(strlwr(head), "cmp") == 0) {
 			
 		} else if (strcmp(strlwr(head), "jmp") == 0) {
