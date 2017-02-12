@@ -210,6 +210,157 @@ typedef struct {
 Register reg[REG_CNT], state;
 int cnt;
 
+/* -------------------------------- */
+
+typedef Register MMBlock;
+typedef struct _mmtype {
+	MMBlock var;
+	char* name;
+	struct _mmtype* prev;
+	struct _mmtype* next;
+} MMType;
+
+typedef struct {
+	int stackSiz;
+	int heapSiz;
+	int stackCnt;
+	int heapCnt;
+	MMType* stackTop;
+	MMType* heapStart;
+	MMType* heapEnd;
+} pMM;
+
+typedef struct {
+	pMM* p;
+	int (*push)(pMM* p, MMBlock* blk);
+	int (*pop)(pMM* p, MMBlock* blk);
+	int (*join)(pMM* p, char* name, MMBlock* blk);
+	MMBlock* (*get)(pMM* p, char* name);
+	int (*exit)(pMM* p, char* name);
+} MemoryManager;
+
+int _mm_push(pMM* p, MMBlock* blk) {
+	if (p->stackTop == 0) {
+		p->stackTop = malloc(sizeof(MMType));
+		p->stackTop->prev = 0;
+	} else {
+		p->stackTop->next = malloc(sizeof(MMType));
+		p->stackTop->next->prev = p->stackTop;
+		p->stackTop = p->stackTop->next;
+	}
+	if (p->stackCnt >= p->stackSiz) return 1;
+	memcpy(&(p->stackTop->var), blk, sizeof(MMBlock));
+	p->stackCnt += 1;
+	p->stackTop->next = 0;
+	return 0;
+}
+
+int _mm_pop(pMM* p, MMBlock* blk) {
+	if (p->stackTop->prev == 0) {
+		memcpy(blk, &(p->stackTop->var), sizeof(MMBlock));
+		free(p->stackTop);
+		p->stackTop = 0;
+		p->stackCnt = 0;
+		return 0;
+	}
+	if (p->stackTop == 0) return 1;
+	memcpy(blk, &(p->stackTop->var), sizeof(MMBlock));
+	p->stackCnt -= 1;
+	p->stackTop = p->stackTop->prev;
+	free(p->stackTop->next);
+	return 0;
+}
+
+int _mm_join(pMM* p, char* name, MMBlock* blk) {
+	if (p->heapStart == 0) {
+		p->heapStart = malloc(sizeof(MMType));
+		p->heapStart->prev = 0;
+		p->heapEnd = p->heapStart;
+	} else {
+		p->heapEnd->next = malloc(sizeof(MMType));
+		p->heapEnd->next->prev = p->heapEnd;
+		p->heapEnd = p->heapEnd->next;
+	}
+	if (p->heapCnt >= p->heapSiz) return 1;
+	p->heapEnd->name = malloc(sizeof(char) * (strlen(name) + 1));
+	strcpy(p->heapEnd->name, name);
+	memcpy(&(p->heapEnd->var), blk, sizeof(MMBlock));
+	p->heapCnt += 1;
+	p->heapEnd->next = 0;
+	return 0;
+}
+
+MMType* _mm_search(pMM* p, char* name) {
+	MMType* lp = p->heapStart;
+	MMType* rp = p->heapEnd;
+	do {
+		if (strcmp(lp->name, name) == 0) return lp;
+		else lp = lp->next;
+		if (strcmp(rp->name, name) == 0) return rp;
+		else rp = rp->prev;
+	} while (
+		((p->heapCnt % 2 == 1) && lp != rp) || (
+			(p->heapCnt % 2 == 0) && (lp != rp->next) && (rp != lp->prev)
+			)
+		);
+	if (lp == rp) {
+		if (strcmp(lp->name, name) == 0) return lp;
+	}
+	return 0;
+}
+
+MMBlock* _mm_get(pMM* p, char* name) {
+	MMType* sp = 0;
+	sp = _mm_search(p, name);
+	if (sp == 0) return 0;
+	return &(sp->var);
+}
+
+int _mm_exit(pMM* p, char* name) {
+	MMType* sp = 0;
+	sp = _mm_search(p, name);
+	if (sp == 0) return 1;
+	if (sp == p->heapStart) {
+		p->heapStart = sp->next;
+		p->heapStart->prev = 0;
+	} else if (sp == p->heapEnd) {
+		p->heapEnd = sp->prev;
+		p->heapEnd->next = 0;
+	} else {
+		sp->prev->next = sp->next;
+		sp->next->prev = sp->prev;
+	}
+	p->heapCnt -= 1;
+	free(sp->name);
+	free(sp);
+	return 0;
+}
+
+MemoryManager* InitMemoryManager(int stackSize, int heapSize) {
+	pMM* p = malloc(sizeof(pMM));
+	p->stackSiz = stackSize;
+	p->heapSiz = heapSize;
+	p->stackCnt = 0;
+	p->heapCnt = 0;
+	p->stackTop = 0;
+	p->heapStart = 0;
+	p->heapEnd = 0;
+	
+	MemoryManager* c = malloc(sizeof(MemoryManager));
+	c->p = p;
+	c->push = &_mm_push;
+	c->pop = &_mm_pop;
+	c->join = &_mm_join;
+	c->get = &_mm_get;
+	c->exit = &_mm_exit;
+	
+	return c;
+}
+
+MemoryManager* mm;
+
+/* -------------------------------- */
+
 int lines(char* src);
 char* line(char* src, int index);
 char* cut(char* src, const char* head);
@@ -869,16 +1020,48 @@ void compile(char* var) {
 
 void run(char* var) {
 	if (var == 0) return;
+	char* conf = cut(var, ".conf");
 	char* data = cut(var, ".data");
 	char* code = cut(var, ".code");
 	
+	int stackSiz = 0, heapSiz = 0;
+	if (conf != 0) {
+		int confLines = lines(conf);
+		char type[8] = "", value[8] = "";
+		print("CONF: %d line(s), init...\n", confLines);
+		for (int i = 0; i < confLines; i++) {
+			sscanf(line(conf, i), "%s %[^\n]", type, value);
+			if (strcmp(strlwr(type), "stack") == 0) {
+				if (sscanf(value, "%d", &stackSiz) == 0) {
+					print("\nNSASM init error!\n");
+					print("\tAt [CONF] line %d: %s\n\n", i + 1, line(data, i));
+					return;
+				}
+			} else if (strcmp(strlwr(type), "heap") == 0) {
+				if (sscanf(value, "%d", &heapSiz) == 0) {
+					print("\nNSASM init error!\n");
+					print("\tAt [CONF] line %d: %s\n\n", i + 1, line(data, i));
+					return;
+				}
+			} else {
+				print("\nNSASM init error!\n");
+				print("\tAt [CONF] line %d: %s\n\n", i + 1, line(data, i));
+				return;
+			}
+		}
+	} else {
+		stackSiz = 32;
+		heapSiz = 96;
+	}
+	mm = InitMemoryManager(stackSiz, heapSiz);
+	
 	if (data != 0) {
 		int dataLines = lines(data);
-		print("DATA: %d line(s), init...\n", dataLines);
+		print("DATA: %d line(s), loading...\n", dataLines);
 		for (int i = 0; i < dataLines; i++)
 			if (execute(line(data, i), 'd')) {
 				print("\nNSASM running error!\n");
-				print("\tAt line %d: %s\n\n", i + 1, line(data, i));
+				print("\tAt [DATA] line %d: %s\n\n", i + 1, line(data, i));
 				return;
 			}
 	}
@@ -897,7 +1080,7 @@ void run(char* var) {
 			}
 			if (cnt >= codeLines) {
 				print("\nNSASM running error!\n");
-				print("\tAt line %d: %s\n\n", prev + 1, line(code, prev));
+				print("\tAt [CODE] line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
 			}
 		}
