@@ -208,7 +208,7 @@ typedef struct {
 
 #define REG_CNT 8
 Register reg[REG_CNT];
-Register* state;
+Register state;
 char tagBuf[32];
 int cnt;
 
@@ -4506,7 +4506,7 @@ void run(char* var) {
 	}
 	
 	if (code != 0) {
-		cnt = 0; tagBuf = "";
+		cnt = 0; tagBuf[0] = '\0';
 		int prev = 0;
 		int codeLines = lines(code);
 		print("CODE: %d line(s), running...\n\n", codeLines);
@@ -4518,7 +4518,7 @@ void run(char* var) {
 				return;
 			}
 			cnt = jump(code , tagBuf);
-			tagBuf = "";
+			tagBuf[0] = '\0';
 			if (cnt >= codeLines) {
 				print("\nNSASM running error!\n");
 				print("At [CODE] line %d: %s\n\n", prev + 1, line(code, prev));
