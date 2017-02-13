@@ -1,3 +1,15 @@
+.conf {
+	stack 16
+	heap 32
+}
+
+.data {
+	var a = 1
+	var b = 2.0F
+	var c = 'c'
+	var d = "hello"
+}
+
 .code {
 	mov r1, 1234
 	mov r2, 1.5F
@@ -21,6 +33,15 @@
 	out 0, '\n'
 	out 0, "R5: "
 	out 0, r5
+	out 0, '\n'
+	out 0, '\n'
+	out 0, a
+	out 0, '\n'
+	out 0, b
+	out 0, '\n'
+	out 0, c
+	out 0, '\n'
+	out 0, d
 	out 0, '\n'
 	end
 }
