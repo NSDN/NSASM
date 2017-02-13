@@ -480,6 +480,8 @@ int execute(char* var, char type) {
 			
 		} else if (strcmp(strlwr(head), "str") == 0) {
 			
+		} else if (strcmp(strlwr(head), "rem") == 0) {
+			
 		} else {
 			return 1;
 		}
