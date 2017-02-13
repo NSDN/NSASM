@@ -660,26 +660,26 @@ int execute(char* var, char type) {
 				}
 			}
 		} else if (strcmp(strlwr(head), "push") == 0) {
-			if (src[0] == 'r' || src[0] == 'R') {
-				int srn = -1;
-				sscanf(src, "%*[rR]%d", &srn);
-				if (srn >= 0 && srn < REG_CNT) {
-					mm->push(mm->p, &reg[srn]);
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int dsn = -1;
+				sscanf(dst, "%*[rR]%d", &dsn);
+				if (dsn >= 0 && dsn < REG_CNT) {
+					mm->push(mm->p, &reg[dsn]);
 				} else return 1;
 			} else {
-				Register* r = mm->get(mm->p, src);
+				Register* r = mm->get(mm->p, dst);
 				if (r == 0) return 1;
 				mm->push(mm->p, r);
 			}
 		} else if (strcmp(strlwr(head), "pop") == 0) {
-			if (src[0] == 'r' || src[0] == 'R') {
-				int srn = -1;
-				sscanf(src, "%*[rR]%d", &srn);
-				if (srn >= 0 && srn < REG_CNT) {
-					mm->pop(mm->p, &reg[srn]);
+			if (dst[0] == 'r' || dst[0] == 'R') {
+				int dsn = -1;
+				sscanf(dst, "%*[rR]%d", &dsn);
+				if (dsn >= 0 && dsn < REG_CNT) {
+					mm->pop(mm->p, &reg[dsn]);
 				} else return 1;
 			} else {
-				Register* r = mm->get(mm->p, src);
+				Register* r = mm->get(mm->p, dst);
 				if (r == 0) return 1;
 				mm->pop(mm->p, r);
 			}

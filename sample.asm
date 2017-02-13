@@ -22,6 +22,16 @@
 	mul r2, 2.0F
 	div r5, 3.0F
 	
+	add a, r1
+	sub r5, b
+	mul b, r4
+	
+	push r1
+	xor r1, r1
+	pop r1
+	
+	inc d
+	
 	out 0, "R1: "
 	out 0, r1
 	out 0, '\n'
@@ -43,5 +53,15 @@
 	out 0, '\n'
 	out 0, d
 	out 0, '\n'
+	
+	mov r1, 10
+[jump]
+	out 0, "+1s "
+	dec r1
+	cmp r1, 0
+	jnz [jump]
+	
+	out 0, '\n'
+	
 	end
 }
