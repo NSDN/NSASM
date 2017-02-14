@@ -7,6 +7,18 @@
 
 #if defined(WINDOWS)
 #define _CRT_SECURE_NO_WARNINGS
+#else
+char* strlwr(char* s) {
+	char* str;
+	str = s;
+	while(*str != '\0') {
+		if(*str >= 'A' && *str <= 'Z') {
+			*str += 'a'-'A';
+		}
+		str++;
+	}
+	return s; 
+}
 #endif
 
 #include <stdio.h>
@@ -47,15 +59,33 @@ int main(int argc, char* argv[]) {
 #include <stdarg.h>
 #define clear() system("clear")
 int print(const char* format, ...) {
-	va_list args = 0;
+	va_list args;
 	va_start(args, format);
 	int result = vprintf(format, args);
 	va_end(args);
 	return result;
 }
-char* scan(char* buffer) { return gets(buffer); }
+char* scan(char* buffer) {
+	char count = 0, tmp = 0;
+	while (1) {
+		tmp = getchar();
+		if (tmp == '\n') break;
+		buffer[count] = tmp;
+		if (buffer[count] == 0x08 && count > 0) {
+			count -= 1;
+			print("%c", 0x08);
+			continue;
+		}
+		else if (buffer[count] != 0x08) {
+			print("%c", buffer[count]);
+			count += 1;
+		}
+	}
+	buffer[count] = '\0';
+	print("\n");
+}
 int fscan(char* buffer, const char* format, ...) {
-	gets(buffer);
+	scan(buffer);
 	va_list args;
 	va_start(args, format);
 	int result = vsscanf(buffer, format, args);
@@ -203,7 +233,7 @@ typedef struct {
     char vChar;
     int vInt;
     float vFloat;
-    void* vPtr;
+    char* vPtr;
 } Register;
 
 #define REG_CNT 8
@@ -379,10 +409,11 @@ char* read(char* path) {
 		print("Error: File open failed.\n\n");
 		return 0;
 	}
-	int length = 0;
+	int length = 0; char tmp;
 	while (feof(f) == 0) {
-		fgetc(f);
-		length += 1;
+		tmp = fgetc(f);
+		if (tmp != '\r')
+			length += 1;
 	}
 	fclose(f);
 	f = fopen(path, "r");
@@ -393,8 +424,11 @@ char* read(char* path) {
 	char* data = malloc(sizeof(char) * (length + 1));
 	length = 0;
 	while (feof(f) == 0) {
-		data[length] = fgetc(f);
-		length += 1;
+		tmp = fgetc(f);
+		if (tmp != '\r') {
+			data[length] = tmp;
+			length += 1;
+		}
 	}
 	data[length] = '\0';
 	return data;
@@ -469,6 +503,7 @@ int execute(char* var, char type) {
 				if (src[len - 1] != '\"') return 1;
 				r.vPtr = malloc(sizeof(char) * (len - 1));
 				memcpy(r.vPtr, src + 1, len - 2);
+				r.vPtr[len - 2] = '\0';
 				r.type = RegPtr;
 			}
 			mm->join(mm->p, dst, &r);
@@ -4439,7 +4474,7 @@ int execute(char* var, char type) {
 		#ifdef WINDOWS
 			__asm { nop; }
 		#else
-			asm("nop");
+			__asm__("nop");
 		#endif
 		} else if (strcmp(strlwr(head), "rst") == 0) {
 			

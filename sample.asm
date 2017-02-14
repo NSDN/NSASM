@@ -7,7 +7,7 @@
 	var a = 1
 	var b = 2.0F
 	var c = 'c'
-	var d = "hello"
+	var d = "gensokyo"
 }
 
 .code {
@@ -55,7 +55,7 @@
 	out 0, '\n'
 	
 	mov r1, 10
-[jump]
+	[jump]
 	out 0, "+1s "
 	dec r1
 	cmp r1, 0
