@@ -438,7 +438,7 @@ int nsasm(int argc, char* argv[]) {
     print("NyaSama Assembly Script Module\n");
     print("Version: %1.2f\n\n", VERSION);
     if (argc < 2) {
-        print("Usage: nasm [c/r] [FILE]\n\n");
+        print("Usage: nsasm [c/r] [FILE]\n\n");
         return 0;
     } else {
         if (argc == 3) {
