@@ -54,14 +54,8 @@
 	out 0, d
 	out 0, '\n'
 	
-	mov r1, 10
-	[jump]
-	out 0, "+1s "
-	dec r1
-	cmp r1, 0
-	jnz [jump]
-	
 	out 0, '\n'
+	run plusonesec.asm
 	
 	end
 }

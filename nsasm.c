@@ -236,14 +236,6 @@ typedef struct {
     char* vPtr;
 } Register;
 
-#define REG_CNT 8
-Register reg[REG_CNT];
-Register state;
-char tagBuf[32];
-int cnt;
-
-/* -------------------------------- */
-
 typedef Register MMBlock;
 typedef struct _mmtype {
 	MMBlock var;
@@ -368,6 +360,24 @@ int _mm_exit(pMM* p, char* name) {
 	return 0;
 }
 
+void _mm_clear(pMM* p) {
+	MMType* ptr = p->stackTop;
+	MMType* tmp = 0;
+
+	while (ptr > 0) {
+		tmp = ptr;
+		ptr = ptr->prev;
+		free(tmp);
+	}
+	
+	ptr = p->heapStart;
+	while (ptr > 0) {
+		tmp = ptr;
+		ptr = ptr->next;
+		free(tmp);
+	}
+}
+
 MemoryManager* InitMemoryManager(int stackSize, int heapSize) {
 	pMM* p = malloc(sizeof(pMM));
 	p->stackSiz = stackSize;
@@ -389,7 +399,32 @@ MemoryManager* InitMemoryManager(int stackSize, int heapSize) {
 	return c;
 }
 
-MemoryManager* mm;
+void DisposeMemoryManager(MemoryManager* ptr) {
+	_mm_clear(ptr->p);
+	free(ptr->p);
+	free(ptr);
+}
+
+#define REG_CNT 8
+typedef struct {
+	MemoryManager* mm;
+	Register reg[REG_CNT];
+	Register state;
+	char tag[32];
+	int cnt;
+} Instance;
+
+Instance* NewInstance(int stackSiz, int heapSiz) {
+	Instance* ptr = malloc(sizeof(Instance));
+	ptr->mm = InitMemoryManager(stackSiz, heapSiz);
+	ptr->tag[0] = '\0';
+	ptr->cnt = 0;
+}
+
+void FreeInstance(Instance* ptr) {
+	DisposeMemoryManager(ptr->mm);
+	free(ptr);
+}
 
 /* -------------------------------- */
 
@@ -398,15 +433,15 @@ char* line(char* src, int index);
 char* cut(char* src, const char* head);
 char* get(char* src, int start, char* buf, int size);
 
-int jump(char* src, char* tag);
-int execute(char* var, char type);
+int execute(Instance* inst, char* var, char type);
 void compile(char* var);
 void run(char* var);
 
 char* read(char* path) {
 	FILE* f = fopen(path, "r");
 	if (f == 0) {
-		print("Error: File open failed.\n\n");
+		print("File open failed.\n");
+		print("At file: %s\n\n", path);
 		return 0;
 	}
 	int length = 0; char tmp;
@@ -418,7 +453,8 @@ char* read(char* path) {
 	fclose(f);
 	f = fopen(path, "r");
 	if (f == 0) {
-		print("Error: File open failed.\n\n");
+		print("File open failed.\n");
+		print("At file: %s\n\n", path);
 		return 0;
 	}
 	char* data = malloc(sizeof(char) * (length + 1));
@@ -456,7 +492,7 @@ int nsasm(int argc, char* argv[]) {
     }
 }
 
-int execute(char* var, char type) {
+int execute(Instance* inst, char* var, char type) {
 	char head[32] = "\0", dst[32] = "\0", src[64] = "\0";
 	if (type == 'd') {
 		sscanf(var, "%s %[^ \t=] %*[= \t]%[^\n]", head, dst, src);
@@ -506,7 +542,7 @@ int execute(char* var, char type) {
 				r.vPtr[len - 2] = '\0';
 				r.type = RegPtr;
 			}
-			mm->join(mm->p, dst, &r);
+			inst->mm->join(inst->mm->p, dst, &r);
 		} else if (strcmp(strlwr(head), "int") == 0) {
 			
 		} else if (strcmp(strlwr(head), "char") == 0) {
@@ -531,22 +567,22 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[srn].type) {
+							switch (inst->reg[srn].type) {
 								case RegChar:
-									reg[drn].vChar = reg[srn].vChar;
-									reg[drn].type = RegChar;
+									inst->reg[drn].vChar = inst->reg[srn].vChar;
+									inst->reg[drn].type = RegChar;
 									break;
 								case RegFloat:
-									reg[drn].vFloat = reg[srn].vFloat;
-									reg[drn].type = RegFloat;
+									inst->reg[drn].vFloat = inst->reg[srn].vFloat;
+									inst->reg[drn].type = RegFloat;
 									break;
 								case RegInt:
-									reg[drn].vInt = reg[srn].vInt;
-									reg[drn].type = RegInt;
+									inst->reg[drn].vInt = inst->reg[srn].vInt;
+									inst->reg[drn].type = RegInt;
 									break;
 								case RegPtr:
-									reg[drn].vPtr = reg[srn].vPtr;
-									reg[drn].type = RegPtr;
+									inst->reg[drn].vPtr = inst->reg[srn].vPtr;
+									inst->reg[drn].type = RegPtr;
 									break;
 								default:
 									return 1;
@@ -557,8 +593,8 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								reg[drn].vChar = tmp;
-								reg[drn].type = RegChar;
+								inst->reg[drn].vChar = tmp;
+								inst->reg[drn].type = RegChar;
 							} else {
 								return 1;
 							}
@@ -567,8 +603,8 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									reg[drn].vFloat = tmp;
-									reg[drn].type = RegFloat;
+									inst->reg[drn].vFloat = tmp;
+									inst->reg[drn].type = RegFloat;
 								} else {
 									return 1;
 								}
@@ -580,28 +616,28 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								reg[drn].vInt = tmp;
-								reg[drn].type = RegInt;
+								inst->reg[drn].vInt = tmp;
+								inst->reg[drn].type = RegInt;
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									reg[drn].vChar = r->vChar;
-									reg[drn].type = RegChar;
+									inst->reg[drn].vChar = r->vChar;
+									inst->reg[drn].type = RegChar;
 									break;
 								case RegFloat:
-									reg[drn].vFloat = r->vFloat;
-									reg[drn].type = RegFloat;
+									inst->reg[drn].vFloat = r->vFloat;
+									inst->reg[drn].type = RegFloat;
 									break;
 								case RegInt:
-									reg[drn].vInt = r->vInt;
-									reg[drn].type = RegInt;
+									inst->reg[drn].vInt = r->vInt;
+									inst->reg[drn].type = RegInt;
 									break;
 								case RegPtr:
-									reg[drn].vPtr = r->vPtr;
-									reg[drn].type = RegPtr;
+									inst->reg[drn].vPtr = r->vPtr;
+									inst->reg[drn].type = RegPtr;
 									break;
 								default:
 									return 1;
@@ -610,27 +646,27 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
 					sscanf(src, "%*[rR]%d", &srn);
 					if (srn >= 0 && srn < REG_CNT) {
-						switch (reg[srn].type) {
+						switch (inst->reg[srn].type) {
 							case RegChar:
-								dr->vChar = reg[srn].vChar;
+								dr->vChar = inst->reg[srn].vChar;
 								dr->type = RegChar;
 								break;
 							case RegFloat:
-								dr->vFloat = reg[srn].vFloat;
+								dr->vFloat = inst->reg[srn].vFloat;
 								dr->type = RegFloat;
 								break;
 							case RegInt:
-								dr->vInt = reg[srn].vInt;
+								dr->vInt = inst->reg[srn].vInt;
 								dr->type = RegInt;
 								break;
 							case RegPtr:
-								dr->vPtr = reg[srn].vPtr;
+								dr->vPtr = inst->reg[srn].vPtr;
 								dr->type = RegPtr;
 								break;
 							default:
@@ -669,7 +705,7 @@ int execute(char* var, char type) {
 							dr->type = RegInt;
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
@@ -699,24 +735,24 @@ int execute(char* var, char type) {
 				int dsn = -1;
 				sscanf(dst, "%*[rR]%d", &dsn);
 				if (dsn >= 0 && dsn < REG_CNT) {
-					mm->push(mm->p, &reg[dsn]);
+					inst->mm->push(inst->mm->p, &inst->reg[dsn]);
 				} else return 1;
 			} else {
-				Register* r = mm->get(mm->p, dst);
+				Register* r = inst->mm->get(inst->mm->p, dst);
 				if (r == 0) return 1;
-				mm->push(mm->p, r);
+				inst->mm->push(inst->mm->p, r);
 			}
 		} else if (strcmp(strlwr(head), "pop") == 0) {
 			if (dst[0] == 'r' || dst[0] == 'R') {
 				int dsn = -1;
 				sscanf(dst, "%*[rR]%d", &dsn);
 				if (dsn >= 0 && dsn < REG_CNT) {
-					mm->pop(mm->p, &reg[dsn]);
+					inst->mm->pop(inst->mm->p, &inst->reg[dsn]);
 				} else return 1;
 			} else {
-				Register* r = mm->get(mm->p, dst);
+				Register* r = inst->mm->get(inst->mm->p, dst);
 				if (r == 0) return 1;
-				mm->pop(mm->p, r);
+				inst->mm->pop(inst->mm->p, r);
 			}
 		} else if (strcmp(strlwr(head), "in") == 0) {
 			
@@ -748,18 +784,18 @@ int execute(char* var, char type) {
 						int srn = 0;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[srn].type) {
+							switch (inst->reg[srn].type) {
 								case RegChar:
-									print("%c", reg[srn].vChar);
+									print("%c", inst->reg[srn].vChar);
 									break;
 								case RegFloat:
-									print("%f", reg[srn].vFloat);
+									print("%f", inst->reg[srn].vFloat);
 									break;
 								case RegInt:
-									print("%d", reg[srn].vInt);
+									print("%d", inst->reg[srn].vInt);
 									break;
 								case RegPtr:
-									print("%s", reg[srn].vPtr);
+									print("%s", inst->reg[srn].vPtr);
 									break;
 								default:
 									return 1;
@@ -794,7 +830,7 @@ int execute(char* var, char type) {
 								print("%d", tmp);
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
@@ -835,22 +871,22 @@ int execute(char* var, char type) {
 						int srn = 0;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[srn].type) {
+							switch (inst->reg[srn].type) {
 								case RegChar:
 									print("[DEBUG] ");
-									print("%c", reg[srn].vChar);
+									print("%c", inst->reg[srn].vChar);
 									break;
 								case RegFloat:
 									print("[DEBUG] ");
-									print("%f", reg[srn].vFloat);
+									print("%f", inst->reg[srn].vFloat);
 									break;
 								case RegInt:
 									print("[DEBUG] ");
-									print("%d", reg[srn].vInt);
+									print("%d", inst->reg[srn].vInt);
 									break;
 								case RegPtr:
 									print("[DEBUG] ");
-									print("%s", reg[srn].vPtr);
+									print("%s", inst->reg[srn].vPtr);
 									break;
 								default:
 									return 1;
@@ -888,7 +924,7 @@ int execute(char* var, char type) {
 								print("%d", tmp);
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
@@ -925,17 +961,17 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar += (char) reg[srn].vChar;
+											inst->reg[drn].vChar += (char) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vChar += (char) reg[srn].vFloat;
+											inst->reg[drn].vChar += (char) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vChar += (char) reg[srn].vInt;
+											inst->reg[drn].vChar += (char) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -944,15 +980,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vFloat += (float) reg[srn].vChar;
+											inst->reg[drn].vFloat += (float) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat += (float) reg[srn].vFloat;
+											inst->reg[drn].vFloat += (float) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vFloat += (float) reg[srn].vInt;
+											inst->reg[drn].vFloat += (float) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -961,15 +997,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt += (int) reg[srn].vChar;
+											inst->reg[drn].vInt += (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vInt += (int) reg[srn].vFloat;
+											inst->reg[drn].vInt += (int) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt += (int) reg[srn].vInt;
+											inst->reg[drn].vInt += (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -979,14 +1015,14 @@ int execute(char* var, char type) {
 									break;
 								case RegPtr:
 								#ifndef WINDOWS
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vPtr += (int) reg[srn].vChar;
+											inst->reg[drn].vPtr += (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vPtr += (int) reg[srn].vInt;
+											inst->reg[drn].vPtr += (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1004,19 +1040,19 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar += (char) tmp;
+										inst->reg[drn].vChar += (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat += (float) tmp;
+										inst->reg[drn].vFloat += (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt += (int) tmp;
+										inst->reg[drn].vInt += (int) tmp;
 										break;
 									case RegPtr:
 									#ifndef WINDOWS
-										reg[drn].vPtr += (int) tmp;
+										inst->reg[drn].vPtr += (int) tmp;
 									#endif
 										break;
 									default:
@@ -1030,15 +1066,15 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar += (char) tmp;
+											inst->reg[drn].vChar += (char) tmp;
 											break;
 										case RegFloat:
-											reg[drn].vFloat += (float) tmp;
+											inst->reg[drn].vFloat += (float) tmp;
 											break;
 										case RegInt:
-											reg[drn].vInt += (int) tmp;
+											inst->reg[drn].vInt += (int) tmp;
 											break;
 										case RegPtr:
 											return 1;
@@ -1056,19 +1092,19 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar += (char) tmp;
+										inst->reg[drn].vChar += (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat += (float) tmp;
+										inst->reg[drn].vFloat += (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt += (int) tmp;
+										inst->reg[drn].vInt += (int) tmp;
 										break;
 									case RegPtr:
 									#ifndef WINDOWS
-										reg[drn].vPtr += (int) tmp;
+										inst->reg[drn].vPtr += (int) tmp;
 									#endif
 										break;
 									default:
@@ -1076,23 +1112,23 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar += (char) r->vChar;
+											inst->reg[drn].vChar += (char) r->vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat += (float) r->vChar;
+											inst->reg[drn].vFloat += (float) r->vChar;
 											break;
 										case RegInt:
-											reg[drn].vInt += (int) r->vChar;
+											inst->reg[drn].vInt += (int) r->vChar;
 											break;
 										case RegPtr:
 										#ifndef WINDOWS
-											reg[drn].vPtr += (int) r->vChar;
+											inst->reg[drn].vPtr += (int) r->vChar;
 										#endif
 											break;
 										default:
@@ -1100,15 +1136,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar += (char) r->vFloat;
+											inst->reg[drn].vChar += (char) r->vFloat;
 											break;
 										case RegFloat:
-											reg[drn].vFloat += (float) r->vFloat;
+											inst->reg[drn].vFloat += (float) r->vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt += (int) r->vFloat;
+											inst->reg[drn].vInt += (int) r->vFloat;
 											break;
 										case RegPtr:
 											return 1;
@@ -1117,19 +1153,19 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar += (char) r->vInt;
+											inst->reg[drn].vChar += (char) r->vInt;
 											break;
 										case RegFloat:
-											reg[drn].vFloat += (float) r->vInt;
+											inst->reg[drn].vFloat += (float) r->vInt;
 											break;
 										case RegInt:
-											reg[drn].vInt += (int) r->vInt;
+											inst->reg[drn].vInt += (int) r->vInt;
 											break;
 										case RegPtr:
 										#ifndef WINDOWS
-											reg[drn].vPtr += (int) r->vInt;
+											inst->reg[drn].vPtr += (int) r->vInt;
 										#endif
 											break;
 										default:
@@ -1145,7 +1181,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -1153,15 +1189,15 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar += (char) reg[srn].vChar;
+										dr->vChar += (char) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vChar += (char) reg[srn].vFloat;
+										dr->vChar += (char) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vChar += (char) reg[srn].vInt;
+										dr->vChar += (char) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1170,15 +1206,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegFloat:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vFloat += (float) reg[srn].vChar;
+										dr->vFloat += (float) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vFloat += (float) reg[srn].vFloat;
+										dr->vFloat += (float) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vFloat += (float) reg[srn].vInt;
+										dr->vFloat += (float) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1187,15 +1223,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt += (int) reg[srn].vChar;
+										dr->vInt += (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vInt += (int) reg[srn].vFloat;
+										dr->vInt += (int) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vInt += (int) reg[srn].vInt;
+										dr->vInt += (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1205,14 +1241,14 @@ int execute(char* var, char type) {
 								break;
 							case RegPtr:
 							#ifndef WINDOWS
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vPtr += (int) reg[srn].vChar;
+										dr->vPtr += (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vPtr += (int) reg[srn].vInt;
+										dr->vPtr += (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1302,7 +1338,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
@@ -1375,19 +1411,19 @@ int execute(char* var, char type) {
 				int drn = -1;
 				sscanf(dst, "%*[rR]%d", &drn);
 				if (drn >= 0 && drn < REG_CNT) {
-					switch (reg[drn].type) {
+					switch (inst->reg[drn].type) {
 						case RegChar:
-							reg[drn].vChar += 1;
+							inst->reg[drn].vChar += 1;
 							break;
 						case RegFloat:
-							reg[drn].vFloat += 1.0F;
+							inst->reg[drn].vFloat += 1.0F;
 							break;
 						case RegInt:
-							reg[drn].vInt += 1;
+							inst->reg[drn].vInt += 1;
 							break;
 						case RegPtr:
 						#ifndef WINDOWS
-							reg[drn].vPtr += 1;
+							inst->reg[drn].vPtr += 1;
 						#endif
 							break;
 						default:
@@ -1395,7 +1431,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				switch (dr->type) {
 					case RegChar:
@@ -1425,17 +1461,17 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar -= (char) reg[srn].vChar;
+											inst->reg[drn].vChar -= (char) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vChar -= (char) reg[srn].vFloat;
+											inst->reg[drn].vChar -= (char) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vChar -= (char) reg[srn].vInt;
+											inst->reg[drn].vChar -= (char) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1444,15 +1480,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vFloat -= (float) reg[srn].vChar;
+											inst->reg[drn].vFloat -= (float) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat -= (float) reg[srn].vFloat;
+											inst->reg[drn].vFloat -= (float) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vFloat -= (float) reg[srn].vInt;
+											inst->reg[drn].vFloat -= (float) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1461,15 +1497,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt -= (int) reg[srn].vChar;
+											inst->reg[drn].vInt -= (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vInt -= (int) reg[srn].vFloat;
+											inst->reg[drn].vInt -= (int) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt -= (int) reg[srn].vInt;
+											inst->reg[drn].vInt -= (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1479,14 +1515,14 @@ int execute(char* var, char type) {
 									break;
 								case RegPtr:
 								#ifndef WINDOWS
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vPtr -= (int) reg[srn].vChar;
+											inst->reg[drn].vPtr -= (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vPtr -= (int) reg[srn].vInt;
+											inst->reg[drn].vPtr -= (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1504,19 +1540,19 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar -= (char) tmp;
+										inst->reg[drn].vChar -= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat -= (float) tmp;
+										inst->reg[drn].vFloat -= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt -= (int) tmp;
+										inst->reg[drn].vInt -= (int) tmp;
 										break;
 									case RegPtr:
 									#ifndef WINDOWS
-										reg[drn].vPtr -= (int) tmp;
+										inst->reg[drn].vPtr -= (int) tmp;
 									#endif
 										break;
 									default:
@@ -1530,15 +1566,15 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar -= (char) tmp;
+											inst->reg[drn].vChar -= (char) tmp;
 											break;
 										case RegFloat:
-											reg[drn].vFloat -= (float) tmp;
+											inst->reg[drn].vFloat -= (float) tmp;
 											break;
 										case RegInt:
-											reg[drn].vInt -= (int) tmp;
+											inst->reg[drn].vInt -= (int) tmp;
 											break;
 										case RegPtr:
 											return 1;
@@ -1556,19 +1592,19 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar -= (char) tmp;
+										inst->reg[drn].vChar -= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat -= (float) tmp;
+										inst->reg[drn].vFloat -= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt -= (int) tmp;
+										inst->reg[drn].vInt -= (int) tmp;
 										break;
 									case RegPtr:
 									#ifndef WINDOWS
-										reg[drn].vPtr -= (int) tmp;
+										inst->reg[drn].vPtr -= (int) tmp;
 									#endif
 										break;
 									default:
@@ -1576,23 +1612,23 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar -= (char) r->vChar;
+											inst->reg[drn].vChar -= (char) r->vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat -= (float) r->vChar;
+											inst->reg[drn].vFloat -= (float) r->vChar;
 											break;
 										case RegInt:
-											reg[drn].vInt -= (int) r->vChar;
+											inst->reg[drn].vInt -= (int) r->vChar;
 											break;
 										case RegPtr:
 										#ifndef WINDOWS
-											reg[drn].vPtr -= (int) r->vChar;
+											inst->reg[drn].vPtr -= (int) r->vChar;
 										#endif
 											break;
 										default:
@@ -1600,15 +1636,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar -= (char) r->vFloat;
+											inst->reg[drn].vChar -= (char) r->vFloat;
 											break;
 										case RegFloat:
-											reg[drn].vFloat -= (float) r->vFloat;
+											inst->reg[drn].vFloat -= (float) r->vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt -= (int) r->vFloat;
+											inst->reg[drn].vInt -= (int) r->vFloat;
 											break;
 										case RegPtr:
 											return 1;
@@ -1617,19 +1653,19 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar -= (char) r->vInt;
+											inst->reg[drn].vChar -= (char) r->vInt;
 											break;
 										case RegFloat:
-											reg[drn].vFloat -= (float) r->vInt;
+											inst->reg[drn].vFloat -= (float) r->vInt;
 											break;
 										case RegInt:
-											reg[drn].vInt -= (int) r->vInt;
+											inst->reg[drn].vInt -= (int) r->vInt;
 											break;
 										case RegPtr:
 										#ifndef WINDOWS
-											reg[drn].vPtr -= (int) r->vInt;
+											inst->reg[drn].vPtr -= (int) r->vInt;
 										#endif
 											break;
 										default:
@@ -1645,7 +1681,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -1653,15 +1689,15 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar -= (char) reg[srn].vChar;
+										dr->vChar -= (char) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vChar -= (char) reg[srn].vFloat;
+										dr->vChar -= (char) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vChar -= (char) reg[srn].vInt;
+										dr->vChar -= (char) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1670,15 +1706,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegFloat:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vFloat -= (float) reg[srn].vChar;
+										dr->vFloat -= (float) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vFloat -= (float) reg[srn].vFloat;
+										dr->vFloat -= (float) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vFloat -= (float) reg[srn].vInt;
+										dr->vFloat -= (float) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1687,15 +1723,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt -= (int) reg[srn].vChar;
+										dr->vInt -= (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vInt -= (int) reg[srn].vFloat;
+										dr->vInt -= (int) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vInt -= (int) reg[srn].vInt;
+										dr->vInt -= (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1705,14 +1741,14 @@ int execute(char* var, char type) {
 								break;
 							case RegPtr:
 							#ifndef WINDOWS
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vPtr -= (int) reg[srn].vChar;
+										dr->vPtr -= (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vPtr -= (int) reg[srn].vInt;
+										dr->vPtr -= (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -1802,7 +1838,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
@@ -1875,19 +1911,19 @@ int execute(char* var, char type) {
 				int drn = -1;
 				sscanf(dst, "%*[rR]%d", &drn);
 				if (drn >= 0 && drn < REG_CNT) {
-					switch (reg[drn].type) {
+					switch (inst->reg[drn].type) {
 						case RegChar:
-							reg[drn].vChar -= 1;
+							inst->reg[drn].vChar -= 1;
 							break;
 						case RegFloat:
-							reg[drn].vFloat -= 1.0F;
+							inst->reg[drn].vFloat -= 1.0F;
 							break;
 						case RegInt:
-							reg[drn].vInt -= 1;
+							inst->reg[drn].vInt -= 1;
 							break;
 						case RegPtr:
 						#ifndef WINDOWS
-							reg[drn].vPtr -= 1;
+							inst->reg[drn].vPtr -= 1;
 						#endif
 							break;
 						default:
@@ -1895,7 +1931,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				switch (dr->type) {
 					case RegChar:
@@ -1925,17 +1961,17 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar *= (char) reg[srn].vChar;
+											inst->reg[drn].vChar *= (char) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vChar *= (char) reg[srn].vFloat;
+											inst->reg[drn].vChar *= (char) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vChar *= (char) reg[srn].vInt;
+											inst->reg[drn].vChar *= (char) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1944,15 +1980,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vFloat *= (float) reg[srn].vChar;
+											inst->reg[drn].vFloat *= (float) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat *= (float) reg[srn].vFloat;
+											inst->reg[drn].vFloat *= (float) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vFloat *= (float) reg[srn].vInt;
+											inst->reg[drn].vFloat *= (float) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1961,15 +1997,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt *= (int) reg[srn].vChar;
+											inst->reg[drn].vInt *= (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vInt *= (int) reg[srn].vFloat;
+											inst->reg[drn].vInt *= (int) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt *= (int) reg[srn].vInt;
+											inst->reg[drn].vInt *= (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -1988,15 +2024,15 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar *= (char) tmp;
+										inst->reg[drn].vChar *= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat *= (float) tmp;
+										inst->reg[drn].vFloat *= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt *= (int) tmp;
+										inst->reg[drn].vInt *= (int) tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -2011,15 +2047,15 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar *= (char) tmp;
+											inst->reg[drn].vChar *= (char) tmp;
 											break;
 										case RegFloat:
-											reg[drn].vFloat *= (float) tmp;
+											inst->reg[drn].vFloat *= (float) tmp;
 											break;
 										case RegInt:
-											reg[drn].vInt *= (int) tmp;
+											inst->reg[drn].vInt *= (int) tmp;
 											break;
 										case RegPtr:
 											return 1;
@@ -2037,15 +2073,15 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar *= (char) tmp;
+										inst->reg[drn].vChar *= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat *= (float) tmp;
+										inst->reg[drn].vFloat *= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt *= (int) tmp;
+										inst->reg[drn].vInt *= (int) tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -2054,19 +2090,19 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar *= (char) r->vChar;
+											inst->reg[drn].vChar *= (char) r->vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat *= (float) r->vChar;
+											inst->reg[drn].vFloat *= (float) r->vChar;
 											break;
 										case RegInt:
-											reg[drn].vInt *= (int) r->vChar;
+											inst->reg[drn].vInt *= (int) r->vChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2075,15 +2111,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar *= (char) r->vFloat;
+											inst->reg[drn].vChar *= (char) r->vFloat;
 											break;
 										case RegFloat:
-											reg[drn].vFloat *= (float) r->vFloat;
+											inst->reg[drn].vFloat *= (float) r->vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt *= (int) r->vFloat;
+											inst->reg[drn].vInt *= (int) r->vFloat;
 											break;
 										case RegPtr:
 											return 1;
@@ -2092,15 +2128,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar *= (char) r->vInt;
+											inst->reg[drn].vChar *= (char) r->vInt;
 											break;
 										case RegFloat:
-											reg[drn].vFloat *= (float) r->vInt;
+											inst->reg[drn].vFloat *= (float) r->vInt;
 											break;
 										case RegInt:
-											reg[drn].vInt *= (int) r->vInt;
+											inst->reg[drn].vInt *= (int) r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -2117,7 +2153,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -2125,15 +2161,15 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar *= (char) reg[srn].vChar;
+										dr->vChar *= (char) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vChar *= (char) reg[srn].vFloat;
+										dr->vChar *= (char) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vChar *= (char) reg[srn].vInt;
+										dr->vChar *= (char) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2142,15 +2178,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegFloat:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vFloat *= (float) reg[srn].vChar;
+										dr->vFloat *= (float) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vFloat *= (float) reg[srn].vFloat;
+										dr->vFloat *= (float) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vFloat *= (float) reg[srn].vInt;
+										dr->vFloat *= (float) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2159,15 +2195,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt *= (int) reg[srn].vChar;
+										dr->vInt *= (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vInt *= (int) reg[srn].vFloat;
+										dr->vInt *= (int) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vInt *= (int) reg[srn].vInt;
+										dr->vInt *= (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2252,7 +2288,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
@@ -2323,17 +2359,17 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar /= (char) reg[srn].vChar;
+											inst->reg[drn].vChar /= (char) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vChar /= (char) reg[srn].vFloat;
+											inst->reg[drn].vChar /= (char) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vChar /= (char) reg[srn].vInt;
+											inst->reg[drn].vChar /= (char) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -2342,15 +2378,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vFloat /= (float) reg[srn].vChar;
+											inst->reg[drn].vFloat /= (float) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat /= (float) reg[srn].vFloat;
+											inst->reg[drn].vFloat /= (float) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vFloat /= (float) reg[srn].vInt;
+											inst->reg[drn].vFloat /= (float) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -2359,15 +2395,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt /= (int) reg[srn].vChar;
+											inst->reg[drn].vInt /= (int) inst->reg[srn].vChar;
 											break;
 										case RegFloat:
-											reg[drn].vInt /= (int) reg[srn].vFloat;
+											inst->reg[drn].vInt /= (int) inst->reg[srn].vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt /= (int) reg[srn].vInt;
+											inst->reg[drn].vInt /= (int) inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -2386,15 +2422,15 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar /= (char) tmp;
+										inst->reg[drn].vChar /= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat /= (float) tmp;
+										inst->reg[drn].vFloat /= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt /= (int) tmp;
+										inst->reg[drn].vInt /= (int) tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -2409,15 +2445,15 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar /= (char) tmp;
+											inst->reg[drn].vChar /= (char) tmp;
 											break;
 										case RegFloat:
-											reg[drn].vFloat /= (float) tmp;
+											inst->reg[drn].vFloat /= (float) tmp;
 											break;
 										case RegInt:
-											reg[drn].vInt /= (int) tmp;
+											inst->reg[drn].vInt /= (int) tmp;
 											break;
 										case RegPtr:
 											return 1;
@@ -2435,15 +2471,15 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar /= (char) tmp;
+										inst->reg[drn].vChar /= (char) tmp;
 										break;
 									case RegFloat:
-										reg[drn].vFloat /= (float) tmp;
+										inst->reg[drn].vFloat /= (float) tmp;
 										break;
 									case RegInt:
-										reg[drn].vInt /= (int) tmp;
+										inst->reg[drn].vInt /= (int) tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -2452,19 +2488,19 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar /= (char) r->vChar;
+											inst->reg[drn].vChar /= (char) r->vChar;
 											break;
 										case RegFloat:
-											reg[drn].vFloat /= (float) r->vChar;
+											inst->reg[drn].vFloat /= (float) r->vChar;
 											break;
 										case RegInt:
-											reg[drn].vInt /= (int) r->vChar;
+											inst->reg[drn].vInt /= (int) r->vChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2473,15 +2509,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar /= (char) r->vFloat;
+											inst->reg[drn].vChar /= (char) r->vFloat;
 											break;
 										case RegFloat:
-											reg[drn].vFloat /= (float) r->vFloat;
+											inst->reg[drn].vFloat /= (float) r->vFloat;
 											break;
 										case RegInt:
-											reg[drn].vInt /= (int) r->vFloat;
+											inst->reg[drn].vInt /= (int) r->vFloat;
 											break;
 										case RegPtr:
 											return 1;
@@ -2490,15 +2526,15 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											reg[drn].vChar /= (char) r->vInt;
+											inst->reg[drn].vChar /= (char) r->vInt;
 											break;
 										case RegFloat:
-											reg[drn].vFloat /= (float) r->vInt;
+											inst->reg[drn].vFloat /= (float) r->vInt;
 											break;
 										case RegInt:
-											reg[drn].vInt /= (int) r->vInt;
+											inst->reg[drn].vInt /= (int) r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -2515,7 +2551,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -2523,15 +2559,15 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar /= (char) reg[srn].vChar;
+										dr->vChar /= (char) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vChar /= (char) reg[srn].vFloat;
+										dr->vChar /= (char) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vChar /= (char) reg[srn].vInt;
+										dr->vChar /= (char) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2540,15 +2576,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegFloat:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vFloat /= (float) reg[srn].vChar;
+										dr->vFloat /= (float) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vFloat /= (float) reg[srn].vFloat;
+										dr->vFloat /= (float) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vFloat /= (float) reg[srn].vInt;
+										dr->vFloat /= (float) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2557,15 +2593,15 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt /= (int) reg[srn].vChar;
+										dr->vInt /= (int) inst->reg[srn].vChar;
 										break;
 									case RegFloat:
-										dr->vInt /= (int) reg[srn].vFloat;
+										dr->vInt /= (int) inst->reg[srn].vFloat;
 										break;
 									case RegInt:
-										dr->vInt /= (int) reg[srn].vInt;
+										dr->vInt /= (int) inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -2650,7 +2686,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
@@ -2721,32 +2757,32 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											if (reg[drn].vChar > (char) reg[srn].vChar)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) reg[srn].vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) inst->reg[srn].vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) inst->reg[srn].vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vChar > (char) reg[srn].vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) reg[srn].vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) inst->reg[srn].vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) inst->reg[srn].vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vChar > (char) reg[srn].vInt)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) reg[srn].vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) inst->reg[srn].vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) inst->reg[srn].vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2755,30 +2791,30 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											if (reg[drn].vFloat > (float) reg[srn].vChar)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) reg[srn].vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) inst->reg[srn].vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) inst->reg[srn].vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vFloat > (float) reg[srn].vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) reg[srn].vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) inst->reg[srn].vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) inst->reg[srn].vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vFloat > (float) reg[srn].vInt)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) reg[srn].vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) inst->reg[srn].vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) inst->reg[srn].vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2787,30 +2823,30 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											if (reg[drn].vInt > (int) reg[srn].vChar)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) reg[srn].vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) inst->reg[srn].vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) inst->reg[srn].vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vInt > (int) reg[srn].vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) reg[srn].vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) inst->reg[srn].vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) inst->reg[srn].vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vInt > (int) reg[srn].vInt)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) reg[srn].vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) inst->reg[srn].vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) inst->reg[srn].vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2829,30 +2865,30 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										if (reg[drn].vChar > (char) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vChar < (char) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vChar > (char) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vChar < (char) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
-										if (reg[drn].vFloat > (float) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vFloat < (float) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vFloat > (float) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vFloat < (float) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
-										if (reg[drn].vInt > (int) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vInt < (int) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vInt > (int) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vInt < (int) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -2867,30 +2903,30 @@ int execute(char* var, char type) {
 								strchr(src, '.') > 0) {
 								float tmp = 0;
 								if (sscanf(src, "%f", &tmp)) {
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											if (reg[drn].vChar > (char) tmp)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) tmp)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) tmp)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) tmp)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vFloat > (float) tmp)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) tmp)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) tmp)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) tmp)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vInt > (int) tmp)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) tmp)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) tmp)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) tmp)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2908,30 +2944,30 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										if (reg[drn].vChar > (char) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vChar < (char) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vChar > (char) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vChar < (char) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
-										if (reg[drn].vFloat > (float) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vFloat < (float) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vFloat > (float) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vFloat < (float) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
-										if (reg[drn].vInt > (int) tmp)
-											state.vChar = 1;
-										else if (reg[drn].vInt < (int) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (inst->reg[drn].vInt > (int) tmp)
+											inst->state.vChar = 1;
+										else if (inst->reg[drn].vInt < (int) tmp)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -2940,34 +2976,34 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
 							switch (r->type) {
 								case RegChar:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											if (reg[drn].vChar > (char) r->vChar)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) r->vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) r->vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) r->vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vFloat > (float) r->vChar)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) r->vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) r->vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) r->vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vInt > (int) r->vChar)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) r->vChar)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) r->vChar)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) r->vChar)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -2976,30 +3012,30 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegFloat:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											if (reg[drn].vChar > (char) r->vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) r->vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) r->vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) r->vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vFloat > (float) r->vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) r->vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) r->vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) r->vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vInt > (int) r->vFloat)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) r->vFloat)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) r->vFloat)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) r->vFloat)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -3008,30 +3044,30 @@ int execute(char* var, char type) {
 									}
 									break;
 								case RegInt:
-									switch (reg[drn].type) {
+									switch (inst->reg[drn].type) {
 										case RegChar:
-											if (reg[drn].vChar > (char) r->vInt)
-												state.vChar = 1;
-											else if (reg[drn].vChar < (char) r->vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vChar > (char) r->vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vChar < (char) r->vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegFloat:
-											if (reg[drn].vFloat > (float) r->vInt)
-												state.vChar = 1;
-											else if (reg[drn].vFloat < (float) r->vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vFloat > (float) r->vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vFloat < (float) r->vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegInt:
-											if (reg[drn].vInt > (int) r->vInt)
-												state.vChar = 1;
-											else if (reg[drn].vInt < (int) r->vInt)
-												state.vChar = -1;
-											else state.vChar = 0;
-											state.type = RegChar;
+											if (inst->reg[drn].vInt > (int) r->vInt)
+												inst->state.vChar = 1;
+											else if (inst->reg[drn].vInt < (int) r->vInt)
+												inst->state.vChar = -1;
+											else inst->state.vChar = 0;
+											inst->state.type = RegChar;
 											break;
 										case RegPtr:
 											return 1;
@@ -3048,7 +3084,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -3056,30 +3092,30 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										if (dr->vChar > (char) reg[srn].vChar)
-											state.vChar = 1;
-										else if (dr->vChar < (char) reg[srn].vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vChar > (char) inst->reg[srn].vChar)
+											inst->state.vChar = 1;
+										else if (dr->vChar < (char) inst->reg[srn].vChar)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
-										if (dr->vChar > (char) reg[srn].vFloat)
-											state.vChar = 1;
-										else if (dr->vChar < (char) reg[srn].vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vChar > (char) inst->reg[srn].vFloat)
+											inst->state.vChar = 1;
+										else if (dr->vChar < (char) inst->reg[srn].vFloat)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
-										if (dr->vChar > (char) reg[srn].vInt)
-											state.vChar = 1;
-										else if (dr->vChar < (char) reg[srn].vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vChar > (char) inst->reg[srn].vInt)
+											inst->state.vChar = 1;
+										else if (dr->vChar < (char) inst->reg[srn].vInt)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3088,30 +3124,30 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegFloat:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										if (dr->vFloat > (float) reg[srn].vChar)
-											state.vChar = 1;
-										else if (dr->vFloat < (float) reg[srn].vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vFloat > (float) inst->reg[srn].vChar)
+											inst->state.vChar = 1;
+										else if (dr->vFloat < (float) inst->reg[srn].vChar)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
-										if (dr->vFloat > (float) reg[srn].vFloat)
-											state.vChar = 1;
-										else if (dr->vFloat < (float) reg[srn].vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vFloat > (float) inst->reg[srn].vFloat)
+											inst->state.vChar = 1;
+										else if (dr->vFloat < (float) inst->reg[srn].vFloat)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
-										if (dr->vFloat > (float) reg[srn].vInt)
-											state.vChar = 1;
-										else if (dr->vFloat < (float) reg[srn].vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vFloat > (float) inst->reg[srn].vInt)
+											inst->state.vChar = 1;
+										else if (dr->vFloat < (float) inst->reg[srn].vInt)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3120,30 +3156,30 @@ int execute(char* var, char type) {
 								}
 								break;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										if (dr->vInt > (int) reg[srn].vChar)
-											state.vChar = 1;
-										else if (dr->vInt < (int) reg[srn].vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vInt > (int) inst->reg[srn].vChar)
+											inst->state.vChar = 1;
+										else if (dr->vInt < (int) inst->reg[srn].vChar)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
-										if (dr->vInt > (int) reg[srn].vFloat)
-											state.vChar = 1;
-										else if (dr->vInt < (int) reg[srn].vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vInt > (int) inst->reg[srn].vFloat)
+											inst->state.vChar = 1;
+										else if (dr->vInt < (int) inst->reg[srn].vFloat)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
-										if (dr->vInt > (int) reg[srn].vInt)
-											state.vChar = 1;
-										else if (dr->vInt < (int) reg[srn].vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+										if (dr->vInt > (int) inst->reg[srn].vInt)
+											inst->state.vChar = 1;
+										else if (dr->vInt < (int) inst->reg[srn].vInt)
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3165,27 +3201,27 @@ int execute(char* var, char type) {
 							switch (dr->type) {
 								case RegChar:
 									if (dr->vChar > (char) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vChar < (char) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegFloat:
 									if (dr->vFloat > (float) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vFloat < (float) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegInt:
 									if (dr->vInt > (int) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vInt < (int) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegPtr:
 									return 1;
@@ -3203,27 +3239,27 @@ int execute(char* var, char type) {
 								switch (dr->type) {
 									case RegChar:
 										if (dr->vChar > (char) tmp)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vChar < (char) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
 										if (dr->vFloat > (float) tmp)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vFloat < (float) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
 										if (dr->vInt > (int) tmp)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vInt < (int) tmp)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3244,27 +3280,27 @@ int execute(char* var, char type) {
 							switch (dr->type) {
 								case RegChar:
 									if (dr->vChar > (char) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vChar < (char) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegFloat:
 									if (dr->vFloat > (float) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vFloat < (float) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegInt:
 									if (dr->vInt > (int) tmp)
-										state.vChar = 1;
+										inst->state.vChar = 1;
 									else if (dr->vInt < (int) tmp)
-										state.vChar = -1;
-									else state.vChar = 0;
-									state.type = RegChar;
+										inst->state.vChar = -1;
+									else inst->state.vChar = 0;
+									inst->state.type = RegChar;
 									break;
 								case RegPtr:
 									return 1;
@@ -3273,34 +3309,34 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (r->type) {
 							case RegChar:
 								switch (dr->type) {
 									case RegChar:
 										if (dr->vChar > (char) r->vChar)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vChar < (char) r->vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
 										if (dr->vFloat > (float) r->vChar)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vFloat < (float) r->vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
 										if (dr->vInt > (int) r->vChar)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vInt < (int) r->vChar)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3312,27 +3348,27 @@ int execute(char* var, char type) {
 								switch (dr->type) {
 									case RegChar:
 										if (dr->vChar > (char) r->vFloat)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vChar < (char) r->vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
 										if (dr->vFloat > (float) r->vFloat)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vFloat < (float) r->vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
 										if (dr->vInt > (int) r->vFloat)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vInt < (int) r->vFloat)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3344,27 +3380,27 @@ int execute(char* var, char type) {
 								switch (dr->type) {
 									case RegChar:
 										if (dr->vChar > (char) r->vInt)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vChar < (char) r->vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegFloat:
 										if (dr->vFloat > (float) r->vInt)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vFloat < (float) r->vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegInt:
 										if (dr->vInt > (int) r->vInt)
-											state.vChar = 1;
+											inst->state.vChar = 1;
 										else if (dr->vInt < (int) r->vInt)
-											state.vChar = -1;
-										else state.vChar = 0;
-										state.type = RegChar;
+											inst->state.vChar = -1;
+										else inst->state.vChar = 0;
+										inst->state.type = RegChar;
 										break;
 									case RegPtr:
 										return 1;
@@ -3382,23 +3418,23 @@ int execute(char* var, char type) {
 			}
 		} else if (strcmp(strlwr(head), "jmp") == 0) {
 			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				strcpy(tagBuf, dst);
+				strcpy(inst->tag, dst);
 			} else return 1;
 		} else if (strcmp(strlwr(head), "jz") == 0) {
 			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (state.vChar == 0) strcpy(tagBuf, dst);
+				if (inst->state.vChar == 0) strcpy(inst->tag, dst);
 			} else return 1;
 		} else if (strcmp(strlwr(head), "jnz") == 0) {
 			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (state.vChar != 0) strcpy(tagBuf, dst);
+				if (inst->state.vChar != 0) strcpy(inst->tag, dst);
 			} else return 1;
 		} else if (strcmp(strlwr(head), "jg") == 0) {
 			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (state.vChar > 0) strcpy(tagBuf, dst);
+				if (inst->state.vChar > 0) strcpy(inst->tag, dst);
 			} else return 1;
 		} else if (strcmp(strlwr(head), "jl") == 0) {
 			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (state.vChar < 0) strcpy(tagBuf, dst);
+				if (inst->state.vChar < 0) strcpy(inst->tag, dst);
 			} else return 1;
 		} else if (strcmp(strlwr(head), "and") == 0) {
 			if (dst[0] == 'r' || dst[0] == 'R') {
@@ -3409,15 +3445,15 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							if (reg[drn].type == reg[srn].type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == inst->reg[srn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar &= reg[srn].vChar;
+										inst->reg[drn].vChar &= inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt &= reg[srn].vInt;
+										inst->reg[drn].vInt &= inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3430,8 +3466,8 @@ int execute(char* var, char type) {
 						if (src[0] == '\'') {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && reg[drn].type == RegChar) {
-								reg[drn].vChar &= tmp;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
+								inst->reg[drn].vChar &= tmp;
 							} else {
 								return 1;
 							}
@@ -3448,24 +3484,24 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								if (reg[drn].type == RegInt) {
-									reg[drn].vInt &= tmp;
+								if (inst->reg[drn].type == RegInt) {
+									inst->reg[drn].vInt &= tmp;
 								} else {
 									return 1;
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
-							if (reg[drn].type == r->type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == r->type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar &= r->vChar;
+										inst->reg[drn].vChar &= r->vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt &= r->vInt;
+										inst->reg[drn].vInt &= r->vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3477,21 +3513,21 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
 					sscanf(src, "%*[rR]%d", &srn);
 					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == reg[srn].type) {
+						if (dr->type == inst->reg[srn].type) {
 							switch (dr->type) {
 								case RegChar:
-									dr->vChar &= reg[srn].vChar;
+									dr->vChar &= inst->reg[srn].vChar;
 									break;
 								case RegFloat:
 									return 1;
 								case RegInt:
-									dr->vInt &= reg[srn].vInt;
+									dr->vInt &= inst->reg[srn].vInt;
 									break;
 								case RegPtr:
 									return 1;
@@ -3529,7 +3565,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						if (dr->type == r->type) {
 							switch (dr->type) {
@@ -3559,15 +3595,15 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							if (reg[drn].type == reg[srn].type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == inst->reg[srn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar |= reg[srn].vChar;
+										inst->reg[drn].vChar |= inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt |= reg[srn].vInt;
+										inst->reg[drn].vInt |= inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3580,8 +3616,8 @@ int execute(char* var, char type) {
 						if (src[0] == '\'') {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && reg[drn].type == RegChar) {
-								reg[drn].vChar |= tmp;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
+								inst->reg[drn].vChar |= tmp;
 							} else {
 								return 1;
 							}
@@ -3598,24 +3634,24 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								if (reg[drn].type == RegInt) {
-									reg[drn].vInt |= tmp;
+								if (inst->reg[drn].type == RegInt) {
+									inst->reg[drn].vInt |= tmp;
 								} else {
 									return 1;
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
-							if (reg[drn].type == r->type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == r->type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar |= r->vChar;
+										inst->reg[drn].vChar |= r->vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt |= r->vInt;
+										inst->reg[drn].vInt |= r->vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3627,21 +3663,21 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
 					sscanf(src, "%*[rR]%d", &srn);
 					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == reg[srn].type) {
+						if (dr->type == inst->reg[srn].type) {
 							switch (dr->type) {
 								case RegChar:
-									dr->vChar |= reg[srn].vChar;
+									dr->vChar |= inst->reg[srn].vChar;
 									break;
 								case RegFloat:
 									return 1;
 								case RegInt:
-									dr->vInt |= reg[srn].vInt;
+									dr->vInt |= inst->reg[srn].vInt;
 									break;
 								case RegPtr:
 									return 1;
@@ -3679,7 +3715,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						if (dr->type == r->type) {
 							switch (dr->type) {
@@ -3709,15 +3745,15 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							if (reg[drn].type == reg[srn].type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == inst->reg[srn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar ^= reg[srn].vChar;
+										inst->reg[drn].vChar ^= inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt ^= reg[srn].vInt;
+										inst->reg[drn].vInt ^= inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3730,8 +3766,8 @@ int execute(char* var, char type) {
 						if (src[0] == '\'') {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && reg[drn].type == RegChar) {
-								reg[drn].vChar ^= tmp;
+							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
+								inst->reg[drn].vChar ^= tmp;
 							} else {
 								return 1;
 							}
@@ -3748,24 +3784,24 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								if (reg[drn].type == RegInt) {
-									reg[drn].vInt ^= tmp;
+								if (inst->reg[drn].type == RegInt) {
+									inst->reg[drn].vInt ^= tmp;
 								} else {
 									return 1;
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
-							if (reg[drn].type == r->type) {
-								switch (reg[drn].type) {
+							if (inst->reg[drn].type == r->type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar ^= r->vChar;
+										inst->reg[drn].vChar ^= r->vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt ^= r->vInt;
+										inst->reg[drn].vInt ^= r->vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -3777,21 +3813,21 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
 					sscanf(src, "%*[rR]%d", &srn);
 					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == reg[srn].type) {
+						if (dr->type == inst->reg[srn].type) {
 							switch (dr->type) {
 								case RegChar:
-									dr->vChar ^= reg[srn].vChar;
+									dr->vChar ^= inst->reg[srn].vChar;
 									break;
 								case RegFloat:
 									return 1;
 								case RegInt:
-									dr->vInt ^= reg[srn].vInt;
+									dr->vInt ^= inst->reg[srn].vInt;
 									break;
 								case RegPtr:
 									return 1;
@@ -3829,7 +3865,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						if (dr->type == r->type) {
 							switch (dr->type) {
@@ -3855,14 +3891,14 @@ int execute(char* var, char type) {
 				int drn = -1;
 				sscanf(dst, "%*[rR]%d", &drn);
 				if (drn >= 0 && drn < REG_CNT) {
-					switch (reg[drn].type) {
+					switch (inst->reg[drn].type) {
 						case RegChar:
-							reg[drn].vChar = ~reg[drn].vChar;
+							inst->reg[drn].vChar = ~inst->reg[drn].vChar;
 							break;
 						case RegFloat:
 							return 1;
 						case RegInt:
-							reg[drn].vInt = ~reg[drn].vInt;
+							inst->reg[drn].vInt = ~inst->reg[drn].vInt;
 							break;
 						case RegPtr:
 							return 1;
@@ -3871,7 +3907,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				switch (dr->type) {
 					case RegChar:
@@ -3897,16 +3933,16 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar = reg[drn].vChar << reg[srn].vChar;
+											inst->reg[drn].vChar = inst->reg[drn].vChar << inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vChar = reg[drn].vChar << reg[srn].vInt;
+											inst->reg[drn].vChar = inst->reg[drn].vChar << inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -3917,14 +3953,14 @@ int execute(char* var, char type) {
 								case RegFloat:
 									return 1;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt = reg[drn].vInt << reg[srn].vChar;
+											inst->reg[drn].vInt = inst->reg[drn].vInt << inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vInt = reg[drn].vInt << reg[srn].vInt;
+											inst->reg[drn].vInt = inst->reg[drn].vInt << inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -3943,14 +3979,14 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar = reg[drn].vChar << tmp;
+										inst->reg[drn].vChar = inst->reg[drn].vChar << tmp;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt = reg[drn].vInt << tmp;
+										inst->reg[drn].vInt = inst->reg[drn].vInt << tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -3973,14 +4009,14 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar = reg[drn].vChar << tmp;
+										inst->reg[drn].vChar = inst->reg[drn].vChar << tmp;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt = reg[drn].vInt << tmp;
+										inst->reg[drn].vInt = inst->reg[drn].vInt << tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -3989,18 +4025,18 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
 									switch (r->type) {
 										case RegChar:
-											reg[drn].vChar = reg[drn].vChar << r->vChar;
+											inst->reg[drn].vChar = inst->reg[drn].vChar << r->vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vChar = reg[drn].vChar << r->vInt;
+											inst->reg[drn].vChar = inst->reg[drn].vChar << r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4013,12 +4049,12 @@ int execute(char* var, char type) {
 								case RegInt:
 									switch (r->type) {
 										case RegChar:
-											reg[drn].vInt = reg[drn].vInt << r->vChar;
+											inst->reg[drn].vInt = inst->reg[drn].vInt << r->vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vInt = reg[drn].vInt << r->vInt;
+											inst->reg[drn].vInt = inst->reg[drn].vInt << r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4035,7 +4071,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -4043,14 +4079,14 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar = dr->vChar << reg[srn].vChar;
+										dr->vChar = dr->vChar << inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vChar = dr->vChar << reg[srn].vInt;
+										dr->vChar = dr->vChar << inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -4061,14 +4097,14 @@ int execute(char* var, char type) {
 							case RegFloat:
 								return 1;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt = dr->vInt << reg[srn].vChar;
+										dr->vInt = dr->vInt << inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vInt = dr->vInt << reg[srn].vInt;
+										dr->vInt = dr->vInt << inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -4133,7 +4169,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (dr->type) {
 							case RegChar:
@@ -4187,16 +4223,16 @@ int execute(char* var, char type) {
 						int srn = -1;
 						sscanf(src, "%*[rR]%d", &srn);
 						if (srn >= 0 && srn < REG_CNT) {
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vChar = reg[drn].vChar >> reg[srn].vChar;
+											inst->reg[drn].vChar = inst->reg[drn].vChar >> inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vChar = reg[drn].vChar >> reg[srn].vInt;
+											inst->reg[drn].vChar = inst->reg[drn].vChar >> inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4207,14 +4243,14 @@ int execute(char* var, char type) {
 								case RegFloat:
 									return 1;
 								case RegInt:
-									switch (reg[srn].type) {
+									switch (inst->reg[srn].type) {
 										case RegChar:
-											reg[drn].vInt = reg[drn].vInt >> reg[srn].vChar;
+											inst->reg[drn].vInt = inst->reg[drn].vInt >> inst->reg[srn].vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vInt = reg[drn].vInt >> reg[srn].vInt;
+											inst->reg[drn].vInt = inst->reg[drn].vInt >> inst->reg[srn].vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4233,14 +4269,14 @@ int execute(char* var, char type) {
 							if (src[strlen(src) - 1] != '\'') return 1;
 							char tmp = 0;
 							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar = reg[drn].vChar >> tmp;
+										inst->reg[drn].vChar = inst->reg[drn].vChar >> tmp;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt = reg[drn].vInt >> tmp;
+										inst->reg[drn].vInt = inst->reg[drn].vInt >> tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -4263,14 +4299,14 @@ int execute(char* var, char type) {
 								} else {
 									sscanf(src, "%d", &tmp);
 								}
-								switch (reg[drn].type) {
+								switch (inst->reg[drn].type) {
 									case RegChar:
-										reg[drn].vChar = reg[drn].vChar >> tmp;
+										inst->reg[drn].vChar = inst->reg[drn].vChar >> tmp;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										reg[drn].vInt = reg[drn].vInt >> tmp;
+										inst->reg[drn].vInt = inst->reg[drn].vInt >> tmp;
 										break;
 									case RegPtr:
 										return 1;
@@ -4279,18 +4315,18 @@ int execute(char* var, char type) {
 								}
 							}
 						} else {
-							Register* r = mm->get(mm->p, src);
+							Register* r = inst->mm->get(inst->mm->p, src);
 							if (r == 0) return 1;
-							switch (reg[drn].type) {
+							switch (inst->reg[drn].type) {
 								case RegChar:
 									switch (r->type) {
 										case RegChar:
-											reg[drn].vChar = reg[drn].vChar >> r->vChar;
+											inst->reg[drn].vChar = inst->reg[drn].vChar >> r->vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vChar = reg[drn].vChar >> r->vInt;
+											inst->reg[drn].vChar = inst->reg[drn].vChar >> r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4303,12 +4339,12 @@ int execute(char* var, char type) {
 								case RegInt:
 									switch (r->type) {
 										case RegChar:
-											reg[drn].vInt = reg[drn].vInt >> r->vChar;
+											inst->reg[drn].vInt = inst->reg[drn].vInt >> r->vChar;
 											break;
 										case RegFloat:
 											return 1;
 										case RegInt:
-											reg[drn].vInt = reg[drn].vInt >> r->vInt;
+											inst->reg[drn].vInt = inst->reg[drn].vInt >> r->vInt;
 											break;
 										case RegPtr:
 											return 1;
@@ -4325,7 +4361,7 @@ int execute(char* var, char type) {
 					}
 				} else return 1;
 			} else {
-				Register* dr = mm->get(mm->p, dst);
+				Register* dr = inst->mm->get(inst->mm->p, dst);
 				if (dr == 0) return 1;
 				if (src[0] == 'r' || src[0] == 'R') {
 					int srn = -1;
@@ -4333,14 +4369,14 @@ int execute(char* var, char type) {
 					if (srn >= 0 && srn < REG_CNT) {
 						switch (dr->type) {
 							case RegChar:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vChar = dr->vChar >> reg[srn].vChar;
+										dr->vChar = dr->vChar >> inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vChar = dr->vChar >> reg[srn].vInt;
+										dr->vChar = dr->vChar >> inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -4351,14 +4387,14 @@ int execute(char* var, char type) {
 							case RegFloat:
 								return 1;
 							case RegInt:
-								switch (reg[srn].type) {
+								switch (inst->reg[srn].type) {
 									case RegChar:
-										dr->vInt = dr->vInt >> reg[srn].vChar;
+										dr->vInt = dr->vInt >> inst->reg[srn].vChar;
 										break;
 									case RegFloat:
 										return 1;
 									case RegInt:
-										dr->vInt = dr->vInt >> reg[srn].vInt;
+										dr->vInt = dr->vInt >> inst->reg[srn].vInt;
 										break;
 									case RegPtr:
 										return 1;
@@ -4423,7 +4459,7 @@ int execute(char* var, char type) {
 							}
 						}
 					} else {
-						Register* r = mm->get(mm->p, src);
+						Register* r = inst->mm->get(inst->mm->p, src);
 						if (r == 0) return 1;
 						switch (dr->type) {
 							case RegChar:
@@ -4468,6 +4504,11 @@ int execute(char* var, char type) {
 					}
 				}
 			}
+		} else if (strcmp(strlwr(head), "run") == 0) {
+			sscanf(var, "%s %[^\n]", head, src);
+			print("[+] %s\n\n", src);
+			run(read(src));
+			print("[-] %s\n\n", src);
 		} else if (strcmp(strlwr(head), "end") == 0) {
 			return 0;
 		} else if (strcmp(strlwr(head), "nop") == 0) {
@@ -4529,13 +4570,14 @@ void run(char* var) {
 		stackSiz = 32;
 		heapSiz = 96;
 	}
-	mm = InitMemoryManager(stackSiz, heapSiz);
+	
+	Instance* inst = NewInstance(stackSiz, heapSiz);
 	
 	if (data != 0) {
 		int dataLines = lines(data);
 		print("DATA: %d line(s), loading...\n", dataLines);
 		for (int i = 0; i < dataLines; i++)
-			if (execute(line(data, i), 'd')) {
+			if (execute(inst, line(data, i), 'd')) {
 				print("\nNSASM running error!\n");
 				print("At [DATA] line %d: %s\n\n", i + 1, line(data, i));
 				return;
@@ -4543,20 +4585,22 @@ void run(char* var) {
 	}
 	
 	if (code != 0) {
-		cnt = 0; tagBuf[0] = '\0';
-		int prev = 0;
-		int codeLines = lines(code);
+		int prev = 0, codeLines = lines(code);
 		print("CODE: %d line(s), running...\n\n", codeLines);
-		for (; cnt < codeLines; cnt++) {
-			prev = cnt;
-			if (execute(line(code, cnt), 'c')) {
+		for (; inst->cnt < codeLines; inst->cnt++) {
+			prev = inst->cnt;
+			if (execute(inst, line(code, inst->cnt), 'c')) {
 				print("\nNSASM running error!\n");
 				print("At line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
 			}
-			cnt = jump(code , tagBuf);
-			tagBuf[0] = '\0';
-			if (cnt >= codeLines) {
+			for (int i = 0; i < codeLines; i++) {
+				if (strcmp(line(code, i), inst->tag) == 0) {
+					inst->cnt = i;
+					inst->tag[0] = '\0';
+				}
+			}
+			if (inst->cnt >= codeLines) {
 				print("\nNSASM running error!\n");
 				print("At [CODE] line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
@@ -4564,16 +4608,9 @@ void run(char* var) {
 		}
 	}
 	
+	FreeInstance(inst);
+	free(conf); free(data); free(code);
 	print("\nNSASM running finished.\n\n");
-}
-
-int jump(char* src, char* tag) {
-	int len = lines(src);
-	if (strlen(tag) == 0) return cnt;
-	for (int i = 0; i < len; i++) {
-		if (strcmp(line(src, i), tag) == 0) return i;
-	}
-	return cnt;
 }
 
 char* get(char* src, int start, char* buf, int size) {
