@@ -417,8 +417,11 @@ typedef struct {
 Instance* NewInstance(int stackSiz, int heapSiz) {
 	Instance* ptr = malloc(sizeof(Instance));
 	ptr->mm = InitMemoryManager(stackSiz, heapSiz);
+	memset(ptr->reg, 0, sizeof(Register) * REG_CNT);
+	memset(&ptr->state, 0, sizeof(Register));
 	ptr->tag[0] = '\0';
 	ptr->cnt = 0;
+	return ptr;
 }
 
 void FreeInstance(Instance* ptr) {
@@ -436,6 +439,7 @@ char* get(char* src, int start, char* buf, int size);
 int execute(Instance* inst, char* var, char type);
 void compile(char* var);
 void run(char* var);
+void call(char* var, Instance* prev);
 
 char* read(char* path) {
 	FILE* f = fopen(path, "r");
@@ -4509,6 +4513,9 @@ int execute(Instance* inst, char* var, char type) {
 			print("[+] %s\n\n", src);
 			run(read(src));
 			print("[-] %s\n\n", src);
+		}  else if (strcmp(strlwr(head), "call") == 0) {
+			sscanf(var, "%s %[^\n]", head, src);
+			call(src, inst);
 		} else if (strcmp(strlwr(head), "end") == 0) {
 			return 0;
 		} else if (strcmp(strlwr(head), "nop") == 0) {
@@ -4571,13 +4578,13 @@ void run(char* var) {
 		heapSiz = 96;
 	}
 	
-	Instance* inst = NewInstance(stackSiz, heapSiz);
+	Instance* instance = NewInstance(stackSiz, heapSiz);
 	
 	if (data != 0) {
 		int dataLines = lines(data);
 		print("DATA: %d line(s), loading...\n", dataLines);
 		for (int i = 0; i < dataLines; i++)
-			if (execute(inst, line(data, i), 'd')) {
+			if (execute(instance, line(data, i), 'd')) {
 				print("\nNSASM running error!\n");
 				print("At [DATA] line %d: %s\n\n", i + 1, line(data, i));
 				return;
@@ -4587,20 +4594,20 @@ void run(char* var) {
 	if (code != 0) {
 		int prev = 0, codeLines = lines(code);
 		print("CODE: %d line(s), running...\n\n", codeLines);
-		for (; inst->cnt < codeLines; inst->cnt++) {
-			prev = inst->cnt;
-			if (execute(inst, line(code, inst->cnt), 'c')) {
+		for (; instance->cnt < codeLines; instance->cnt++) {
+			prev = instance->cnt;
+			if (execute(instance, line(code, instance->cnt), 'c')) {
 				print("\nNSASM running error!\n");
 				print("At line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
 			}
 			for (int i = 0; i < codeLines; i++) {
-				if (strcmp(line(code, i), inst->tag) == 0) {
-					inst->cnt = i;
-					inst->tag[0] = '\0';
+				if (strcmp(line(code, i), instance->tag) == 0) {
+					instance->cnt = i;
+					instance->tag[0] = '\0';
 				}
 			}
-			if (inst->cnt >= codeLines) {
+			if (instance->cnt >= codeLines) {
 				print("\nNSASM running error!\n");
 				print("At [CODE] line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
@@ -4608,9 +4615,87 @@ void run(char* var) {
 		}
 	}
 	
-	FreeInstance(inst);
+	FreeInstance(instance);
 	free(conf); free(data); free(code);
 	print("\nNSASM running finished.\n\n");
+}
+
+void call(char* var, Instance* prev) {
+	char* raw = 0;
+	raw = read(var);
+	if (raw == 0) return;
+	char* conf = cut(raw, ".conf");
+	char* data = cut(raw, ".data");
+	char* code = cut(raw, ".code");
+	
+	int stackSiz = 0, heapSiz = 0;
+	if (conf != 0) {
+		int confLines = lines(conf);
+		char type[8] = "", value[8] = "";
+		for (int i = 0; i < confLines; i++) {
+			sscanf(line(conf, i), "%s %[^\n]", type, value);
+			if (strcmp(strlwr(type), "stack") == 0) {
+				if (sscanf(value, "%d", &stackSiz) == 0) {
+					print("\nNSASM init error in \"%s\"!\n", var);
+					print("At [CONF] line %d: %s\n\n", i + 1, line(data, i));
+					return;
+				}
+			} else if (strcmp(strlwr(type), "heap") == 0) {
+				if (sscanf(value, "%d", &heapSiz) == 0) {
+					print("\nNSASM init error in \"%s\"!\n", var);
+					print("At [CONF] line %d: %s\n\n", i + 1, line(data, i));
+					return;
+				}
+			} else {
+				print("\nNSASM init error in \"%s\"!\n", var);
+				print("At [CONF] line %d: %s\n\n", i + 1, line(data, i));
+				return;
+			}
+		}
+	} else {
+		stackSiz = 32;
+		heapSiz = 96;
+	}
+	
+	Instance* instance = NewInstance(stackSiz, heapSiz);
+	memcpy(instance->reg, prev->reg, sizeof(Register) * REG_CNT);
+	memcpy(&instance->state, &prev->state, sizeof(Register));
+	
+	if (data != 0) {
+		int dataLines = lines(data);
+		for (int i = 0; i < dataLines; i++)
+			if (execute(instance, line(data, i), 'd')) {
+				print("\nNSASM running error in \"%s\"!\n", var);
+				print("At [DATA] line %d: %s\n\n", i + 1, line(data, i));
+				return;
+			}
+	}
+	
+	if (code != 0) {
+		int prev = 0, codeLines = lines(code);
+		for (; instance->cnt < codeLines; instance->cnt++) {
+			prev = instance->cnt;
+			if (execute(instance, line(code, instance->cnt), 'c')) {
+				print("\nNSASM running error in \"%s\"!\n", var);
+				print("At line %d: %s\n\n", prev + 1, line(code, prev));
+				return;
+			}
+			for (int i = 0; i < codeLines; i++) {
+				if (strcmp(line(code, i), instance->tag) == 0) {
+					instance->cnt = i;
+					instance->tag[0] = '\0';
+				}
+			}
+			if (instance->cnt >= codeLines) {
+				print("\nNSASM running error in \"%s\"!\n", var);
+				print("At [CODE] line %d: %s\n\n", prev + 1, line(code, prev));
+				return;
+			}
+		}
+	}
+	
+	FreeInstance(instance);
+	free(conf); free(data); free(code); free(raw);
 }
 
 char* get(char* src, int start, char* buf, int size) {

@@ -10,7 +10,7 @@
 }
 
 .code {
-    mov r1, 60
+    mov r1, r7
 [jump]
 	out 0, plus
     out 0, one

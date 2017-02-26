@@ -55,7 +55,8 @@
 	out 0, '\n'
 	
 	out 0, '\n'
-	run plusonesec.asm
+	mov r7, 100
+	call plusonesec.asm
 	
 	end
 }
