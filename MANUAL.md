@@ -1,6 +1,6 @@
 # NSASM MANUAL
 NyaSama Assembly Script Module Manual
-## Instruction (zh_CN)
+## Introduction (zh_CN)
 
 ### 操作符不区分大小写
 
