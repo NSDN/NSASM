@@ -7,7 +7,6 @@ NyaSama Assembly Script Module Manual
 #### 大概是8086的风格
 
 <code>
-
 r#      # = 0 to (REG_CNT - 1)，通用寄存器
 
 mov     数据传送
@@ -65,8 +64,6 @@ nop     空指令
 rst     复位，PC不可用，暂未实现
 
 rem     注释行前缀
-
-
 </code>
 
 ### 基本结构
