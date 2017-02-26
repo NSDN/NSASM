@@ -4,7 +4,12 @@ NyaSama Assembly Script Module Manual
 
 ### 操作符不区分大小写
 
+#### 大概是8086的风格
+
 <code>
+
+r#      # = 0 to (REG_CNT - 1)，通用寄存器
+
 mov     数据传送
 
 push    入栈
@@ -27,7 +32,7 @@ mul     乘法
 
 div     除法
 
-cmp     比较
+cmp     比较，仅此操作符能改变跳转状态寄存器
 
 jz      零则跳转
 
@@ -49,13 +54,19 @@ shl     左移
 
 shr     右移
 
-end     程序结束
+end     程序结束，或子程序结束
+
+run     外部加载子程序文件，带提示
+
+call    外部加载子程序文件，无提示
 
 nop     空指令
 
-rst     复位，PC不可用
+rst     复位，PC不可用，暂未实现
 
 rem     注释行前缀
+
+
 </code>
 
 ### 基本结构
