@@ -40,7 +40,7 @@ rem     注释行前缀
 
 ### 基本结构
 
-``` R
+``` javascript
 .conf {
     stack 栈大小
     heap 堆大小
