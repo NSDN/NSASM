@@ -24,6 +24,10 @@ char* strlwr(char* s) {
 #include <stdio.h>
 #include <string.h>
 
+#define OK 0
+#define ERR 1
+#define ETC -1
+
 int nsasm(int argc, char* argv[]);
 
 #if defined(WINDOWS)
@@ -157,6 +161,7 @@ int fscan(char* buffer, const char* format, ...) {
 	va_end(args);
 	return result;
 }
+
 #elif defined(STM32)
 #include <stdarg.h>
 #define IOBUF 128
@@ -215,20 +220,22 @@ int fscan(char* buffer, const char* format, ...) {
 	va_end(args);
 	return result;
 }
+
 #endif
 
 /* -------------------------------- */
 
-#define VERSION 0.1
+#define VERSION 0.2
 
 typedef enum {
-	RegChar,
     RegInt,
     RegFloat,
+	RegChar,
     RegPtr
 } RegType;
 
 typedef struct {
+	char readOnly;
     RegType type;
 	union {
 		char vChar;
@@ -274,11 +281,11 @@ int _mm_push(pMM* p, MMBlock* blk) {
 		p->stackTop->next->prev = p->stackTop;
 		p->stackTop = p->stackTop->next;
 	}
-	if (p->stackCnt >= p->stackSiz) return 1;
+	if (p->stackCnt >= p->stackSiz) return ERR;
 	memcpy(&(p->stackTop->var), blk, sizeof(MMBlock));
 	p->stackCnt += 1;
 	p->stackTop->next = 0;
-	return 0;
+	return OK;
 }
 
 int _mm_pop(pMM* p, MMBlock* blk) {
@@ -287,14 +294,25 @@ int _mm_pop(pMM* p, MMBlock* blk) {
 		free(p->stackTop);
 		p->stackTop = 0;
 		p->stackCnt = 0;
-		return 0;
+		return OK;
 	}
-	if (p->stackTop == 0) return 1;
+	if (p->stackTop == 0) return ERR;
 	memcpy(blk, &(p->stackTop->var), sizeof(MMBlock));
 	p->stackCnt -= 1;
 	p->stackTop = p->stackTop->prev;
 	free(p->stackTop->next);
-	return 0;
+	return OK;
+}
+
+MMType* _mm_search(pMM* p, char* name) {
+	MMType* tp = p->heapStart;
+	if (p->heapCnt == 0) return OK;
+	do {
+		if (tp->name == 0) break;
+		if (strcmp(tp->name, name) == 0) return tp;
+		else tp = tp->next;
+	} while (tp != 0);
+	return OK;
 }
 
 int _mm_join(pMM* p, char* name, MMBlock* blk) {
@@ -307,45 +325,28 @@ int _mm_join(pMM* p, char* name, MMBlock* blk) {
 		p->heapEnd->next->prev = p->heapEnd;
 		p->heapEnd = p->heapEnd->next;
 	}
-	if (p->heapCnt >= p->heapSiz) return 1;
+	p->heapEnd->name = 0;
+	if (p->heapCnt >= p->heapSiz) return ERR;
+	if (_mm_search(p, name) != 0) return ERR;
 	p->heapEnd->name = malloc(sizeof(char) * (strlen(name) + 1));
 	strcpy(p->heapEnd->name, name);
 	memcpy(&(p->heapEnd->var), blk, sizeof(MMBlock));
 	p->heapCnt += 1;
 	p->heapEnd->next = 0;
-	return 0;
-}
-
-MMType* _mm_search(pMM* p, char* name) {
-	MMType* lp = p->heapStart;
-	MMType* rp = p->heapEnd;
-	do {
-		if (strcmp(lp->name, name) == 0) return lp;
-		else lp = lp->next;
-		if (strcmp(rp->name, name) == 0) return rp;
-		else rp = rp->prev;
-	} while (
-		((p->heapCnt % 2 == 1) && lp != rp) || (
-			(p->heapCnt % 2 == 0) && (lp != rp->next) && (rp != lp->prev)
-			)
-		);
-	if (lp == rp) {
-		if (strcmp(lp->name, name) == 0) return lp;
-	}
-	return 0;
+	return OK;
 }
 
 MMBlock* _mm_get(pMM* p, char* name) {
 	MMType* sp = 0;
 	sp = _mm_search(p, name);
-	if (sp == 0) return 0;
+	if (sp == 0) return OK;
 	return &(sp->var);
 }
 
 int _mm_exit(pMM* p, char* name) {
 	MMType* sp = 0;
 	sp = _mm_search(p, name);
-	if (sp == 0) return 1;
+	if (sp == 0) return ERR;
 	if (sp == p->heapStart) {
 		p->heapStart = sp->next;
 		p->heapStart->prev = 0;
@@ -359,7 +360,7 @@ int _mm_exit(pMM* p, char* name) {
 	p->heapCnt -= 1;
 	free(sp->name);
 	free(sp);
-	return 0;
+	return OK;
 }
 
 void _mm_clear(pMM* p) {
@@ -433,4110 +434,670 @@ void FreeInstance(Instance* ptr) {
 
 /* -------------------------------- */
 
-int lines(char* src);
-char* line(char* src, int index);
-char* cut(char* src, const char* head);
-char* get(char* src, int start, char* buf, int size);
+int _rem_rem(Instance* inst, Register* dst, Register* src);
+
+int _dat_var(Instance* inst, Register* dst, Register* src);
+int _dat_int(Instance* inst, Register* dst, Register* src);
+int _dat_char(Instance* inst, Register* dst, Register* src);
+int _dat_float(Instance* inst, Register* dst, Register* src);
+int _dat_str(Instance* inst, Register* dst, Register* src);
+
+int _fun_mov(Instance* inst, Register* dst, Register* src);
+int _fun_push(Instance* inst, Register* dst, Register* src);
+int _fun_pop(Instance* inst, Register* dst, Register* src);
+int _fun_in(Instance* inst, Register* dst, Register* src);
+int _fun_out(Instance* inst, Register* dst, Register* src);
+int _fun_add(Instance* inst, Register* dst, Register* src);
+int _fun_inc(Instance* inst, Register* dst, Register* src);
+int _fun_sub(Instance* inst, Register* dst, Register* src);
+int _fun_dec(Instance* inst, Register* dst, Register* src);
+int _fun_mul(Instance* inst, Register* dst, Register* src);
+int _fun_div(Instance* inst, Register* dst, Register* src);
+int _fun_cmp(Instance* inst, Register* dst, Register* src);
+int _fun_jmp(Instance* inst, Register* dst, Register* src);
+int _fun_jz(Instance* inst, Register* dst, Register* src);
+int _fun_jnz(Instance* inst, Register* dst, Register* src);
+int _fun_jg(Instance* inst, Register* dst, Register* src);
+int _fun_jl(Instance* inst, Register* dst, Register* src);
+int _fun_and(Instance* inst, Register* dst, Register* src);
+int _fun_or(Instance* inst, Register* dst, Register* src);
+int _fun_xor(Instance* inst, Register* dst, Register* src);
+int _fun_not(Instance* inst, Register* dst, Register* src);
+int _fun_shl(Instance* inst, Register* dst, Register* src);
+int _fun_shr(Instance* inst, Register* dst, Register* src);
+int _fun_run(Instance* inst, Register* dst, Register* src);
+int _fun_call(Instance* inst, Register* dst, Register* src);
+int _fun_end(Instance* inst, Register* dst, Register* src);
+int _fun_nop(Instance* inst, Register* dst, Register* src);
+int _fun_rst(Instance* inst, Register* dst, Register* src);
+
+typedef struct {
+	char name[8];
+	int (*fun)(Instance* inst, Register* dst, Register* src);
+} Function;
+
+#define FUN_NO_OPER_CNT 4
+#if defined(ARDUINO)
+static Function code funList[] = {
+#else 
+static Function funList[] = {
+#endif
+	{ "rem", &_rem_rem },
+	{ "end", &_fun_end },
+	{ "nop", &_fun_nop },
+	{ "rst", &_fun_rst },
+
+	{ "var", &_dat_var },
+	{ "int", &_dat_int },
+	{ "char", &_dat_char },
+	{ "float", &_dat_float },
+	{ "str", &_dat_str },
+	
+	{ "mov", &_fun_mov },
+	{ "push", &_fun_push },
+	{ "pop", &_fun_pop },
+	{ "in", &_fun_in },
+	{ "out", &_fun_out },
+	{ "add", &_fun_add },
+	{ "inc", &_fun_inc },
+	{ "sub", &_fun_sub },
+	{ "dec", &_fun_dec },
+	{ "mul", &_fun_mul },
+	{ "div", &_fun_div },
+	{ "cmp", &_fun_cmp },
+	{ "jmp", &_fun_jmp },
+	{ "jz", &_fun_jz },
+	{ "jnz", &_fun_jnz },
+	{ "jg", &_fun_jg },
+	{ "jl", &_fun_jl },
+	{ "and", &_fun_and },
+	{ "or", &_fun_or },
+	{ "xor", &_fun_xor },
+	{ "not", &_fun_not },
+	{ "shl", &_fun_shl },
+	{ "shr", &_fun_shr },
+	{ "run", &_fun_run },
+	{ "call", &_fun_call },
+
+	{ "\0", 0 }
+};
+
+int getSymbolIndex(Function list[], char* var);
+int verifyVarName(char* var);
+int verifyTag(char* var);
+int getRegister(Instance* inst, char* var, Register** ptr);
+
+/* -------------------------------- */
 
 int execute(Instance* inst, char* var, char type);
 void compile(char* var);
 void run(char* var);
 void call(char* var, Instance* prev);
 
-char* read(char* path) {
-	FILE* f = fopen(path, "r");
-	if (f == 0) {
-		print("File open failed.\n");
-		print("At file: %s\n\n", path);
-		return 0;
-	}
-	int length = 0; char tmp;
-	while (feof(f) == 0) {
-		tmp = fgetc(f);
-		if (tmp != '\r')
-			length += 1;
-	}
-	fclose(f);
-	f = fopen(path, "r");
-	if (f == 0) {
-		print("File open failed.\n");
-		print("At file: %s\n\n", path);
-		return 0;
-	}
-	char* data = malloc(sizeof(char) * (length + 1));
-	length = 0;
-	while (feof(f) == 0) {
-		tmp = fgetc(f);
-		if (tmp != '\r') {
-			data[length] = tmp;
-			length += 1;
-		}
-	}
-	data[length] = '\0';
-	return data;
-}
+char* read(char* path);
+int lines(char* src);
+char* line(char* src, int index);
+char* cut(char* src, const char* head);
+char* get(char* src, int start, char* buf, int size);
+
+/* -------------------------------- */
 
 int nsasm(int argc, char* argv[]) {
     print("NyaSama Assembly Script Module\n");
     print("Version: %1.2f\n\n", VERSION);
     if (argc < 2) {
         print("Usage: nsasm [c/r] [FILE]\n\n");
-        return 0;
+        return OK;
     } else {
         if (argc == 3) {
             if (strchr(argv[1], 'c') > 0) {
 				compile(read(argv[2]));
-                return 0;
+                return OK;
             }
 			if (strchr(argv[1], 'r') > 0) {
 				run(read(argv[2]));
-				return 0;
+				return OK;
 			}
         }
 		run(read(argv[1]));
-        return 0;
+        return OK;
     }
+}
+
+/* -------------------------------- */
+
+int _rem_rem(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+
+int _dat_var(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	return inst->mm->join(inst->mm->p, dst->data.vPtr, src);
+}
+int _dat_int(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+int _dat_char(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+int _dat_float(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+int _dat_str(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+
+int _fun_mov(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	if (dst->type == RegChar && src->type == RegPtr) {
+		dst->data.vChar = src->data.vPtr[0];
+	} else if (dst->type == RegPtr && src->type == RegChar) {
+		dst->data.vPtr[0] = src->data.vChar;
+	} else {
+		memcpy(dst, src, sizeof(Register));
+		if (dst->readOnly) dst->readOnly = 0;
+	}
+	return OK;
+}
+int _fun_push(Instance* inst, Register* dst, Register* src) {
+	return inst->mm->push(inst->mm->p, dst);
+}
+int _fun_pop(Instance* inst, Register* dst, Register* src) {
+	if (dst->readOnly) return ERR;
+	return inst->mm->push(inst->mm->p, dst);
+}
+int _fun_in(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+int _fun_out(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	switch (dst->data.vInt) {
+		case 0x00:
+			switch (src->type) {
+				case RegChar:
+					print("%c", src->data.vChar);
+					break;
+				case RegFloat:
+					print("%f", src->data.vFloat);
+					break;
+				case RegInt:
+					print("%d", src->data.vInt);
+					break;
+				case RegPtr:
+					print("%s", src->data.vPtr);
+					break;
+			}
+			break;
+		case 0xFF:
+			print("[DEBUG] ");
+			switch (src->type) {
+				case RegChar:
+					print("%c", src->data.vChar);
+					break;
+				case RegFloat:
+					print("%f", src->data.vFloat);
+					break;
+				case RegInt:
+					print("%d", src->data.vInt);
+					break;
+				case RegPtr:
+					print("%s", src->data.vPtr);
+					break;
+			}
+			break;
+		default:
+			return ERR;
+	}
+	return OK;
+}
+int __calc_char__(char* dst, char src, char fun) {
+	switch (fun) {
+		case '+': *dst += src; break;
+		case '-': *dst -= src; break;
+		case '*': *dst *= src; break;
+		case '/': *dst /= src; break;
+		case '&': *dst &= src; break;
+		case '|': *dst |= src; break;
+		case '~': *dst = ~(*dst); break;
+		case '^': *dst ^= src; break;
+		case '<': *dst = *dst << src; break;
+		case '>': *dst = *dst >> src; break;
+		default: return ERR;
+	}
+	return OK;
+}
+int __calc_int__(int* dst, int src, char fun) {
+	switch (fun) {
+		case '+': *dst += src; break;
+		case '-': *dst -= src; break;
+		case '*': *dst *= src; break;
+		case '/': *dst /= src; break;
+		case '&': *dst &= src; break;
+		case '|': *dst |= src; break;
+		case '~': *dst = ~(*dst); break;
+		case '^': *dst ^= src; break;
+		case '<': *dst = *dst << src; break;
+		case '>': *dst = *dst >> src; break;
+		default: return ERR;
+	}
+	return OK;
+}
+int __calc_float__(float* dst, float src, char fun) {
+	switch (fun) {
+		case '+': *dst += src; break;
+		case '-': *dst -= src; break;
+		case '*': *dst *= src; break;
+		case '/': *dst /= src; break;
+		case '&': return ERR;
+		case '|': return ERR;
+		case '~': return ERR;
+		case '^': return ERR;
+		case '<': return ERR;
+		case '>': return ERR;
+		default: return ERR;
+	}
+	return OK;
+}
+int __calc_ptr__(char** dst, int src, char fun) {
+	switch (fun) {
+		case '+': *dst += src; break;
+		case '-': *dst -= src; break;
+		case '*': return ERR;
+		case '/': return ERR;
+		case '&': return ERR;
+		case '|': return ERR;
+		case '~': return ERR;
+		case '^': return ERR;
+		case '<': return ERR;
+		case '>': return ERR;
+		default: return ERR;
+	}
+	return OK;
+}
+int __calc__(Register* dst, Register* src, char fun) {
+	switch (dst->type) {
+		case RegChar:
+			switch (src->type) {
+				case RegChar:
+					return __calc_char__(&(dst->data.vChar), src->data.vChar, fun);
+				case RegFloat:
+					return __calc_char__(&(dst->data.vChar), src->data.vFloat, fun);
+				case RegInt:
+					return __calc_char__(&(dst->data.vChar), src->data.vInt, fun);
+				case RegPtr:
+					return ERR;
+			}
+		case RegFloat:
+			switch (src->type) {
+				case RegChar:
+					return __calc_float__(&(dst->data.vFloat), src->data.vChar, fun);
+				case RegFloat:
+					return __calc_float__(&(dst->data.vFloat), src->data.vFloat, fun);
+				case RegInt:
+					return __calc_float__(&(dst->data.vFloat), src->data.vInt, fun);
+				case RegPtr:
+					return ERR;
+			}
+		case RegInt:
+			switch (src->type) {
+				case RegChar:
+					return __calc_int__(&(dst->data.vInt), src->data.vChar, fun);
+				case RegFloat:
+					return __calc_int__(&(dst->data.vInt), src->data.vFloat, fun);
+				case RegInt:
+					return __calc_int__(&(dst->data.vInt), src->data.vInt, fun);
+				case RegPtr:
+					return ERR;
+			}
+		case RegPtr:
+			switch (src->type) {
+				case RegChar:
+					return __calc_ptr__(&(dst->data.vPtr), src->data.vChar, fun);
+				case RegFloat:
+					return ERR;
+				case RegInt:
+					return __calc_ptr__(&(dst->data.vPtr), src->data.vInt, fun);
+				case RegPtr:
+					return ERR;
+			}
+	}
+}
+int _fun_add(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '+');
+}
+int _fun_inc(Instance* inst, Register* dst, Register* src) {
+	if (dst->readOnly) return ERR;
+	Register r;
+	r.readOnly = 0;
+	r.type = RegChar;
+	r.data.vChar = 1;
+	return __calc__(dst, &r, '+');
+}
+int _fun_sub(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '-');
+}
+int _fun_dec(Instance* inst, Register* dst, Register* src) {
+	if (dst->readOnly) return ERR;
+	Register r;
+	r.readOnly = 0;
+	r.type = RegChar;
+	r.data.vChar = 1;
+	return __calc__(dst, &r, '-');
+}
+int _fun_mul(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '*');
+}
+int _fun_div(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '/');
+}
+int _fun_cmp(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (_fun_mov(inst, &(inst->state), dst) == ERR) return ERR;
+	if (_fun_sub(inst, &(inst->state), src) == ERR) return ERR;
+	switch (inst->state.type) {
+		case RegChar:
+			inst->state.data.vInt = inst->state.data.vChar;
+			break;
+		case RegFloat:
+			inst->state.data.vInt = (int) inst->state.data.vFloat;
+			break;
+		case RegInt:
+			break;
+		case RegPtr:
+			return ERR;
+	}
+	inst->state.type = RegInt;
+	return OK;
+}
+int _fun_jmp(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	if (verifyTag(dst->data.vPtr) == ERR) return ERR;
+	strcpy(inst->tag, dst->data.vPtr);
+	return OK;
+}
+int _fun_jz(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	if (verifyTag(dst->data.vPtr) == ERR) return ERR;
+	if (inst->state.data.vInt == 0) strcpy(inst->tag, dst->data.vPtr);
+	return OK;
+}
+int _fun_jnz(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	if (verifyTag(dst->data.vPtr) == ERR) return ERR;
+	if (inst->state.data.vInt != 0) strcpy(inst->tag, dst->data.vPtr);
+	return OK;
+}
+int _fun_jg(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	if (verifyTag(dst->data.vPtr) == ERR) return ERR;
+	if (inst->state.data.vInt > 0) strcpy(inst->tag, dst->data.vPtr);
+	return OK;
+}
+int _fun_jl(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	if (verifyTag(dst->data.vPtr) == ERR) return ERR;
+	if (inst->state.data.vInt < 0) strcpy(inst->tag, dst->data.vPtr);
+	return OK;
+}
+int _fun_and(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '&');
+}
+int _fun_or(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '|');
+}
+int _fun_xor(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '^');
+}
+int _fun_not(Instance* inst, Register* dst, Register* src) {
+	if (dst->readOnly) return ERR;
+	Register r;
+	r.readOnly = 0;
+	r.type = RegChar;
+	r.data.vChar = 0;
+	return __calc__(dst, &r, '~');
+}
+int _fun_shl(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '<');
+}
+int _fun_shr(Instance* inst, Register* dst, Register* src) {
+	if (src == 0) return ERR;
+	if (dst->readOnly) return ERR;
+	return __calc__(dst, src, '>');
+}
+int _fun_run(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	print("[+] %s\n\n", dst->data.vPtr);
+	run(read(dst->data.vPtr));
+	print("[-] %s\n\n", dst->data.vPtr);
+	return OK;
+}
+int _fun_call(Instance* inst, Register* dst, Register* src) {
+	if (dst->type != RegPtr) return ERR;
+	call(dst->data.vPtr, inst);
+	return OK;
+}
+int _fun_end(Instance* inst, Register* dst, Register* src) {
+	return ETC;
+}
+int _fun_nop(Instance* inst, Register* dst, Register* src) {
+	#ifdef WINDOWS
+		__asm { 
+			nop;
+		}
+	#else
+		__asm__("nop");
+	#endif
+	return OK;
+}
+int _fun_rst(Instance* inst, Register* dst, Register* src) {
+	return OK;
+}
+
+/* -------------------------------- */
+
+int getSymbolIndex(Function list[], char* var) {
+	for (int i = 0; list[i].name[0] != '\0'; i++) {
+		if (strcmp(strlwr(var), list[i].name) == 0) {
+			return i;
+		}
+	}
+	return ETC;
+}
+
+int verifyVarName(char* var) {
+	if (
+		(var[0] >= '0' && var[0] <= '9') || 
+		var[0] == 'r' || var[0] == 'R' || 
+		var[0] == '-' || var[0] == '+' || 
+		var[0] == '.' || var[0] == '['
+	) return ERR;
+	return OK;
+}
+
+int verifyTag(char* var) {
+	if (var[0] == '[' && var[strlen(var) - 1] == ']') {
+		return OK;
+	}
+	return ERR;
+}
+
+int getRegister(Instance* inst, char* var, Register** ptr) {
+	if (var[0] == 'r' || var[0] == 'R') {
+		int srn = -1;
+		sscanf(var, "%*[rR]%d", &srn);
+		if (srn >= 0 && srn < REG_CNT) {
+			*ptr = &(inst->reg[srn]);
+			return OK;
+		} else return ERR;
+	} else {
+		if (var[0] == '\'') {
+			if (var[strlen(var) - 1] != '\'') return ERR;
+			char tmp = 0;
+			if (sscanf(var, "%*[\'\\]%[^\']c", &tmp)) {
+				*ptr = malloc(sizeof(Register));
+				switch (tmp) {
+					case 'n': (*ptr)->data.vChar = '\n'; break;
+					case 'r': (*ptr)->data.vChar = '\r'; break;
+					case 't': (*ptr)->data.vChar = '\t'; break;
+					case '\\': (*ptr)->data.vChar = '\\'; break;
+					default: (*ptr)->data.vChar = tmp; break;
+				}
+				(*ptr)->type = RegChar;
+				(*ptr)->readOnly = 0;
+				return ETC;
+			} else if (sscanf(var, "%*[\']%[^\']c", &tmp)) {
+				*ptr = malloc(sizeof(Register));
+				(*ptr)->data.vChar = tmp;
+				(*ptr)->type = RegChar;
+				(*ptr)->readOnly = 0;
+				return ETC;
+			} else return ERR;
+		} else if (var[0] == '\"') {
+			int len = strlen(var), repeat = 0;
+			if (var[len - 1] != '\"') {
+				char buf[4];
+				if (sscanf(var, "%*[^*]%*[* ]%[^\n]s", &buf) == 0) {
+					return ERR;
+				}
+				if (sscanf(buf, "%d", &repeat) == 0) {
+					return ERR;
+				}
+			}
+			*ptr = malloc(sizeof(Register));
+			if (repeat == 0) {
+				(*ptr)->data.vPtr = malloc(sizeof(char) * (len - 1));
+				memcpy((*ptr)->data.vPtr, var + 1, len - 2);
+				(*ptr)->data.vPtr[len - 2] = '\0';
+			} else {
+				char* buf = malloc(sizeof(char) * len);
+				if(sscanf(var, "%*[\"]%[^\"]d", buf)) {
+					int bufLen = strlen(buf);
+					(*ptr)->data.vPtr = malloc(sizeof(char) * (bufLen * (repeat + 1)));
+					(*ptr)->data.vPtr[0] = '\0';
+					for (int i = 0; i < repeat; i++) {
+						strcat((*ptr)->data.vPtr, buf);
+					}
+				} else return ERR;
+			}
+			(*ptr)->type = RegPtr;
+			(*ptr)->readOnly = 1;
+			return ETC;
+		} else if (var[0] >= '0' && var[0] <= '9' || var[0] == '-' || var[0] == '+') {
+			if (var[strlen(var) - 1] == 'F' || var[strlen(var) - 1] == 'f' || 
+				strchr(var, '.') > 0) {
+				float tmp = 0;
+				if (sscanf(var, "%f", &tmp)) {
+					*ptr = malloc(sizeof(Register));
+					(*ptr)->data.vFloat = tmp;
+					(*ptr)->type = RegFloat;
+					(*ptr)->readOnly = 0;
+					return ETC;
+				} else return ERR;
+			} else {
+				int tmp = 0;
+				if (var[1] == 'x' || var[1] == 'X' || 
+				var[strlen(var) - 1] == 'h' || var[strlen(var) - 1] == 'H') {
+					sscanf(var, "%x", &tmp);
+				} else {
+					sscanf(var, "%d", &tmp);
+				}
+				*ptr = malloc(sizeof(Register));
+				(*ptr)->data.vInt = tmp;
+				(*ptr)->type = RegInt;
+				(*ptr)->readOnly = 0;
+				return ETC;
+			}
+		} else {
+			Register* r = inst->mm->get(inst->mm->p, var);
+			if (r == 0) return ERR;
+			*ptr = r;
+			return OK;
+		}
+	}
 }
 
 int execute(Instance* inst, char* var, char type) {
 	char head[32] = "\0", dst[32] = "\0", src[64] = "\0";
 	if (type == 'd') {
 		sscanf(var, "%s %[^ \t=] %*[= \t]%[^\n]", head, dst, src);
-		if (strcmp(strlwr(head), "var") == 0) {
-			if (
-				(dst[0] >= '0' && dst[0] <= '9') || 
-				dst[0] == 'r' || dst[0] == 'R' || 
-				dst[0] == '-' || dst[0] == '+' || 
-				dst[0] == '.' || dst[0] == '['
-			) return 1; 
-			Register r;
-			if (src[0] == '\'') {
-				if (src[strlen(src) - 1] != '\'') return 1;
-				char tmp = 0;
-				if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-					r.data.vChar = tmp;
-					r.type = RegChar;
-				} else {
-					return 1;
-				}
-			} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-				if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-					strchr(src, '.') > 0) {
-					float tmp = 0;
-					if (sscanf(src, "%f", &tmp)) {
-						r.data.vFloat = tmp;
-						r.type = RegFloat;
-					} else {
-						return 1;
-					}
-				} else {
-					int tmp = 0;
-					if (src[1] == 'x' || src[1] == 'X' || 
-					src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-						sscanf(src, "%x", &tmp);
-					} else {
-						sscanf(src, "%d", &tmp);
-					}
-					r.data.vInt = tmp;
-					r.type = RegInt;
-				}
-			} else if (src[0] == '\"') {
-				int len = strlen(src);
-				if (src[len - 1] != '\"') return 1;
-				r.data.vPtr = malloc(sizeof(char) * (len - 1));
-				memcpy(r.data.vPtr, src + 1, len - 2);
-				r.data.vPtr[len - 2] = '\0';
-				r.type = RegPtr;
+		int index = getSymbolIndex(funList, head);
+		if (index == ETC) return ERR;
+		if (verifyVarName(dst)) return ERR;
+		Register dr;
+		dr.data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
+		dr.type = RegPtr;
+		strcpy(dr.data.vPtr, dst);
+		Register* sr;
+		if (getRegister(inst, src, &sr) == ETC) {
+			if (funList[index].fun(inst, &dr, sr)) {
+				return ERR;
 			}
-			inst->mm->join(inst->mm->p, dst, &r);
-		} else if (strcmp(strlwr(head), "int") == 0) {
-			
-		} else if (strcmp(strlwr(head), "char") == 0) {
-			
-		} else if (strcmp(strlwr(head), "float") == 0) {
-			
-		} else if (strcmp(strlwr(head), "str") == 0) {
-			
-		} else if (strcmp(strlwr(head), "rem") == 0) {
-			
-		} else {
-			return 1;
-		}
+			free(dr.data.vPtr);
+			free(sr);
+		} else return ERR;
 	} else if (type == 'c') {
-		sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", head, dst, src);
-		if (strcmp(strlwr(head), "mov") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[srn].type) {
-								case RegChar:
-									inst->reg[drn].data.vChar = inst->reg[srn].data.vChar;
-									inst->reg[drn].type = RegChar;
-									break;
-								case RegFloat:
-									inst->reg[drn].data.vFloat = inst->reg[srn].data.vFloat;
-									inst->reg[drn].type = RegFloat;
-									break;
-								case RegInt:
-									inst->reg[drn].data.vInt = inst->reg[srn].data.vInt;
-									inst->reg[drn].type = RegInt;
-									break;
-								case RegPtr:
-									inst->reg[drn].data.vPtr = inst->reg[srn].data.vPtr;
-									inst->reg[drn].type = RegPtr;
-									break;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								inst->reg[drn].data.vChar = tmp;
-								inst->reg[drn].type = RegChar;
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									inst->reg[drn].data.vFloat = tmp;
-									inst->reg[drn].type = RegFloat;
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								inst->reg[drn].data.vInt = tmp;
-								inst->reg[drn].type = RegInt;
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									inst->reg[drn].data.vChar = r->data.vChar;
-									inst->reg[drn].type = RegChar;
-									break;
-								case RegFloat:
-									inst->reg[drn].data.vFloat = r->data.vFloat;
-									inst->reg[drn].type = RegFloat;
-									break;
-								case RegInt:
-									inst->reg[drn].data.vInt = r->data.vInt;
-									inst->reg[drn].type = RegInt;
-									break;
-								case RegPtr:
-									inst->reg[drn].data.vPtr = r->data.vPtr;
-									inst->reg[drn].type = RegPtr;
-									break;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (inst->reg[srn].type) {
-							case RegChar:
-								dr->data.vChar = inst->reg[srn].data.vChar;
-								dr->type = RegChar;
-								break;
-							case RegFloat:
-								dr->data.vFloat = inst->reg[srn].data.vFloat;
-								dr->type = RegFloat;
-								break;
-							case RegInt:
-								dr->data.vInt = inst->reg[srn].data.vInt;
-								dr->type = RegInt;
-								break;
-							case RegPtr:
-								dr->data.vPtr = inst->reg[srn].data.vPtr;
-								dr->type = RegPtr;
-								break;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							dr->data.vChar = tmp;
-							dr->type = RegChar;
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								dr->data.vFloat = tmp;
-								dr->type = RegFloat;
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							dr->data.vInt = tmp;
-							dr->type = RegInt;
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								dr->data.vChar = r->data.vChar;
-								dr->type = RegChar;
-								break;
-							case RegFloat:
-								dr->data.vFloat = r->data.vFloat;
-								dr->type = RegFloat;
-								break;
-							case RegInt:
-								dr->data.vInt = r->data.vInt;
-								dr->type = RegInt;
-								break;
-							case RegPtr:
-								dr->data.vPtr = r->data.vPtr;
-								dr->type = RegPtr;
-								break;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "push") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int dsn = -1;
-				sscanf(dst, "%*[rR]%d", &dsn);
-				if (dsn >= 0 && dsn < REG_CNT) {
-					inst->mm->push(inst->mm->p, &inst->reg[dsn]);
-				} else return 1;
-			} else {
-				Register* r = inst->mm->get(inst->mm->p, dst);
-				if (r == 0) return 1;
-				inst->mm->push(inst->mm->p, r);
-			}
-		} else if (strcmp(strlwr(head), "pop") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int dsn = -1;
-				sscanf(dst, "%*[rR]%d", &dsn);
-				if (dsn >= 0 && dsn < REG_CNT) {
-					inst->mm->pop(inst->mm->p, &inst->reg[dsn]);
-				} else return 1;
-			} else {
-				Register* r = inst->mm->get(inst->mm->p, dst);
-				if (r == 0) return 1;
-				inst->mm->pop(inst->mm->p, r);
-			}
-		} else if (strcmp(strlwr(head), "in") == 0) {
-			
-		} else if (strcmp(strlwr(head), "out") == 0) {
-			int addr = -1;
-			if (dst[1] == 'x' || dst[1] == 'X' || 
-			dst[strlen(dst) - 1] == 'h' || dst[strlen(dst) - 1] == 'H') {
-				sscanf(dst, "%x", &addr);
-			} else {
-				sscanf(dst, "%d", &addr);
-			}
-			switch (addr) {
-				case 0x00:
-					if (src[0] == '\"' || src[0] == '\'') {
-						int len = strlen(src);
-						if (src[len - 1] != '\"' && 
-							src[len - 1] != '\'') return 1;
-						for (int i = 1; i < len - 1; i++) {
-							if (src[i] == '\\') {
-								if (src[i + 1] == 'n') { print("\n"); i++; }
-								else if (src[i + 1] == 't') { print("\t"); i++; }
-								else if (src[i + 1] == 'r') { print("\r"); i++; }
-								else if (src[i + 1] == '\\') { print("\\"); i++; }
-								else print("%c", src[i]);
-							} else 
-								print("%c", src[i]);
-						}	
-					} else if (src[0] == 'r' || src[0] == 'R') {
-						int srn = 0;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[srn].type) {
-								case RegChar:
-									print("%c", inst->reg[srn].data.vChar);
-									break;
-								case RegFloat:
-									print("%f", inst->reg[srn].data.vFloat);
-									break;
-								case RegInt:
-									print("%d", inst->reg[srn].data.vInt);
-									break;
-								case RegPtr:
-									print("%s", inst->reg[srn].data.vPtr);
-									break;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								print("%c", tmp);
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									print("%f", tmp);
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								print("%d", tmp);
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									print("%c", r->data.vChar);
-									break;
-								case RegFloat:
-									print("%f", r->data.vFloat);
-									break;
-								case RegInt:
-									print("%d", r->data.vInt);
-									break;
-								case RegPtr:
-									print("%s", r->data.vPtr);
-									break;
-								default:
-									return 1;
-							}
-						}
-					}
-					break;
-				case 0xFF:
-					if (src[0] == '\"' || src[0] == '\'') {
-						int len = strlen(src);
-						if (src[len - 1] != '\"' && 
-							src[len - 1] != '\'') return 1;
-						print("[DEBUG] ");
-						for (int i = 1; i < len - 1; i++) {
-							if (src[i] == '\\') {
-								if (src[i + 1] == 'n') { print("\n"); i++; }
-								else if (src[i + 1] == 't') { print("\t"); i++; }
-								else if (src[i + 1] == 'r') { print("\r"); i++; }
-								else if (src[i + 1] == '\\') { print("\\"); i++; }
-								else print("%c", src[i]);
-							} else 
-								print("%c", src[i]);
-						}	
-					} else if (src[0] == 'r' || src[0] == 'R') {
-						int srn = 0;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[srn].type) {
-								case RegChar:
-									print("[DEBUG] ");
-									print("%c", inst->reg[srn].data.vChar);
-									break;
-								case RegFloat:
-									print("[DEBUG] ");
-									print("%f", inst->reg[srn].data.vFloat);
-									break;
-								case RegInt:
-									print("[DEBUG] ");
-									print("%d", inst->reg[srn].data.vInt);
-									break;
-								case RegPtr:
-									print("[DEBUG] ");
-									print("%s", inst->reg[srn].data.vPtr);
-									break;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								print("[DEBUG] ");
-								print("%c", tmp);
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									print("[DEBUG] ");
-									print("%f", tmp);
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								print("[DEBUG] ");
-								print("%d", tmp);
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									print("[DEBUG] ");
-									print("%c", r->data.vChar);
-									break;
-								case RegFloat:
-									print("[DEBUG] ");
-									print("%f", r->data.vFloat);
-									break;
-								case RegInt:
-									print("[DEBUG] ");
-									print("%d", r->data.vInt);
-									break;
-								case RegPtr:
-									print("[DEBUG] ");
-									print("%s", r->data.vPtr);
-									break;
-								default:
-									return 1;
-							}
-						}
-					}
-					break;
-				default:
-					return 1;
-			}
-		} else if (strcmp(strlwr(head), "add") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar += (char) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vChar += (char) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vChar += (char) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vFloat += (float) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat += (float) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vFloat += (float) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt += (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vInt += (int) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt += (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vPtr += (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vPtr += (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar += (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat += (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt += (int) tmp;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										inst->reg[drn].data.vPtr += (int) tmp;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar += (char) tmp;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat += (float) tmp;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt += (int) tmp;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar += (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat += (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt += (int) tmp;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										inst->reg[drn].data.vPtr += (int) tmp;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar += (char) r->data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat += (float) r->data.vChar;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt += (int) r->data.vChar;
-											break;
-										case RegPtr:
-										#ifndef WINDOWS
-											inst->reg[drn].data.vPtr += (int) r->data.vChar;
-										#endif
-											break;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar += (char) r->data.vFloat;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat += (float) r->data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt += (int) r->data.vFloat;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar += (char) r->data.vInt;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat += (float) r->data.vInt;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt += (int) r->data.vInt;
-											break;
-										case RegPtr:
-										#ifndef WINDOWS
-											inst->reg[drn].data.vPtr += (int) r->data.vInt;
-										#endif
-											break;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar += (char) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vChar += (char) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vChar += (char) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vFloat += (float) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat += (float) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vFloat += (float) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt += (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vInt += (int) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt += (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-							#ifndef WINDOWS
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vPtr += (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vPtr += (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							#endif
-								break;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar += (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat += (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt += (int) tmp;
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									dr->data.vPtr += (int) tmp;
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar += (char) tmp;
-										break;
-									case RegFloat:
-										dr->data.vFloat += (float) tmp;
-										break;
-									case RegInt:
-										dr->data.vInt += (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar += (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat += (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt += (int) tmp;
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									dr->data.vPtr += (int) tmp;
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar += (char) r->data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat += (float) r->data.vChar;
-										break;
-									case RegInt:
-										dr->data.vInt += (int) r->data.vChar;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										dr->data.vPtr += (int) r->data.vChar;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar += (char) r->data.vFloat;
-										break;
-									case RegFloat:
-										dr->data.vFloat += (float) r->data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt += (int) r->data.vFloat;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar += (char) r->data.vInt;
-										break;
-									case RegFloat:
-										dr->data.vFloat += (float) r->data.vInt;
-										break;
-									case RegInt:
-										dr->data.vInt += (int) r->data.vInt;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										dr->data.vPtr += (int) r->data.vInt;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "inc") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					switch (inst->reg[drn].type) {
-						case RegChar:
-							inst->reg[drn].data.vChar += 1;
-							break;
-						case RegFloat:
-							inst->reg[drn].data.vFloat += 1.0F;
-							break;
-						case RegInt:
-							inst->reg[drn].data.vInt += 1;
-							break;
-						case RegPtr:
-						#ifndef WINDOWS
-							inst->reg[drn].data.vPtr += 1;
-						#endif
-							break;
-						default:
-							return 1;
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				switch (dr->type) {
-					case RegChar:
-						dr->data.vChar += 1;
-						break;
-					case RegFloat:
-						dr->data.vFloat += 1.0F;
-						break;
-					case RegInt:
-						dr->data.vInt += 1;
-						break;
-					case RegPtr:
-					#ifndef WINDOWS
-						dr->data.vPtr += 1;
-					#endif
-						break;
-					default:
-						return 1;
-				}
-			}
-		} else if (strcmp(strlwr(head), "sub") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar -= (char) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vChar -= (char) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vChar -= (char) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vFloat -= (float) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat -= (float) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vFloat -= (float) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt -= (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vInt -= (int) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt -= (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vPtr -= (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vPtr -= (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar -= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat -= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt -= (int) tmp;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										inst->reg[drn].data.vPtr -= (int) tmp;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar -= (char) tmp;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat -= (float) tmp;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt -= (int) tmp;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar -= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat -= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt -= (int) tmp;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										inst->reg[drn].data.vPtr -= (int) tmp;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar -= (char) r->data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat -= (float) r->data.vChar;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt -= (int) r->data.vChar;
-											break;
-										case RegPtr:
-										#ifndef WINDOWS
-											inst->reg[drn].data.vPtr -= (int) r->data.vChar;
-										#endif
-											break;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar -= (char) r->data.vFloat;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat -= (float) r->data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt -= (int) r->data.vFloat;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar -= (char) r->data.vInt;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat -= (float) r->data.vInt;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt -= (int) r->data.vInt;
-											break;
-										case RegPtr:
-										#ifndef WINDOWS
-											inst->reg[drn].data.vPtr -= (int) r->data.vInt;
-										#endif
-											break;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar -= (char) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vChar -= (char) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vChar -= (char) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vFloat -= (float) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat -= (float) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vFloat -= (float) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt -= (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vInt -= (int) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt -= (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-							#ifndef WINDOWS
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vPtr -= (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vPtr -= (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							#endif
-								break;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar -= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat -= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt -= (int) tmp;
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									dr->data.vPtr -= (int) tmp;
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar -= (char) tmp;
-										break;
-									case RegFloat:
-										dr->data.vFloat -= (float) tmp;
-										break;
-									case RegInt:
-										dr->data.vInt -= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar -= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat -= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt -= (int) tmp;
-									break;
-								case RegPtr:
-								#ifndef WINDOWS
-									dr->data.vPtr -= (int) tmp;
-								#endif
-									break;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar -= (char) r->data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat -= (float) r->data.vChar;
-										break;
-									case RegInt:
-										dr->data.vInt -= (int) r->data.vChar;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										dr->data.vPtr -= (int) r->data.vChar;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar -= (char) r->data.vFloat;
-										break;
-									case RegFloat:
-										dr->data.vFloat -= (float) r->data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt -= (int) r->data.vFloat;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar -= (char) r->data.vInt;
-										break;
-									case RegFloat:
-										dr->data.vFloat -= (float) r->data.vInt;
-										break;
-									case RegInt:
-										dr->data.vInt -= (int) r->data.vInt;
-										break;
-									case RegPtr:
-									#ifndef WINDOWS
-										dr->data.vPtr -= (int) r->data.vInt;
-									#endif
-										break;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "dec") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					switch (inst->reg[drn].type) {
-						case RegChar:
-							inst->reg[drn].data.vChar -= 1;
-							break;
-						case RegFloat:
-							inst->reg[drn].data.vFloat -= 1.0F;
-							break;
-						case RegInt:
-							inst->reg[drn].data.vInt -= 1;
-							break;
-						case RegPtr:
-						#ifndef WINDOWS
-							inst->reg[drn].data.vPtr -= 1;
-						#endif
-							break;
-						default:
-							return 1;
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				switch (dr->type) {
-					case RegChar:
-						dr->data.vChar -= 1;
-						break;
-					case RegFloat:
-						dr->data.vFloat -= 1.0F;
-						break;
-					case RegInt:
-						dr->data.vInt -= 1;
-						break;
-					case RegPtr:
-					#ifndef WINDOWS
-						dr->data.vPtr -= 1;
-					#endif
-						break;
-					default:
-						return 1;
-				}
-			}
-		} else if (strcmp(strlwr(head), "mul") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar *= (char) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vChar *= (char) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vChar *= (char) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vFloat *= (float) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat *= (float) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vFloat *= (float) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt *= (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vInt *= (int) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt *= (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar *= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat *= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt *= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar *= (char) tmp;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat *= (float) tmp;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt *= (int) tmp;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar *= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat *= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt *= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar *= (char) r->data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat *= (float) r->data.vChar;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt *= (int) r->data.vChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar *= (char) r->data.vFloat;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat *= (float) r->data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt *= (int) r->data.vFloat;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar *= (char) r->data.vInt;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat *= (float) r->data.vInt;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt *= (int) r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar *= (char) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vChar *= (char) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vChar *= (char) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vFloat *= (float) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat *= (float) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vFloat *= (float) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt *= (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vInt *= (int) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt *= (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar *= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat *= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt *= (int) tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar *= (char) tmp;
-										break;
-									case RegFloat:
-										dr->data.vFloat *= (float) tmp;
-										break;
-									case RegInt:
-										dr->data.vInt *= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar *= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat *= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt *= (int) tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar *= (char) r->data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat *= (float) r->data.vChar;
-										break;
-									case RegInt:
-										dr->data.vInt *= (int) r->data.vChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar *= (char) r->data.vFloat;
-										break;
-									case RegFloat:
-										dr->data.vFloat *= (float) r->data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt *= (int) r->data.vFloat;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar *= (char) r->data.vInt;
-										break;
-									case RegFloat:
-										dr->data.vFloat *= (float) r->data.vInt;
-										break;
-									case RegInt:
-										dr->data.vInt *= (int) r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "div") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar /= (char) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vChar /= (char) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vChar /= (char) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vFloat /= (float) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat /= (float) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vFloat /= (float) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt /= (int) inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vInt /= (int) inst->reg[srn].data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt /= (int) inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar /= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat /= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt /= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar /= (char) tmp;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat /= (float) tmp;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt /= (int) tmp;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar /= (char) tmp;
-										break;
-									case RegFloat:
-										inst->reg[drn].data.vFloat /= (float) tmp;
-										break;
-									case RegInt:
-										inst->reg[drn].data.vInt /= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar /= (char) r->data.vChar;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat /= (float) r->data.vChar;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt /= (int) r->data.vChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar /= (char) r->data.vFloat;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat /= (float) r->data.vFloat;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt /= (int) r->data.vFloat;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar /= (char) r->data.vInt;
-											break;
-										case RegFloat:
-											inst->reg[drn].data.vFloat /= (float) r->data.vInt;
-											break;
-										case RegInt:
-											inst->reg[drn].data.vInt /= (int) r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar /= (char) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vChar /= (char) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vChar /= (char) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vFloat /= (float) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat /= (float) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vFloat /= (float) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt /= (int) inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vInt /= (int) inst->reg[srn].data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt /= (int) inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}  else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar /= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat /= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt /= (int) tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar /= (char) tmp;
-										break;
-									case RegFloat:
-										dr->data.vFloat /= (float) tmp;
-										break;
-									case RegInt:
-										dr->data.vInt /= (int) tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar /= (char) tmp;
-									break;
-								case RegFloat:
-									dr->data.vFloat /= (float) tmp;
-									break;
-								case RegInt:
-									dr->data.vInt /= (int) tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar /= (char) r->data.vChar;
-										break;
-									case RegFloat:
-										dr->data.vFloat /= (float) r->data.vChar;
-										break;
-									case RegInt:
-										dr->data.vInt /= (int) r->data.vChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar /= (char) r->data.vFloat;
-										break;
-									case RegFloat:
-										dr->data.vFloat /= (float) r->data.vFloat;
-										break;
-									case RegInt:
-										dr->data.vInt /= (int) r->data.vFloat;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (dr->type) {
-									case RegChar:
-										dr->data.vChar /= (char) r->data.vInt;
-										break;
-									case RegFloat:
-										dr->data.vFloat /= (float) r->data.vInt;
-										break;
-									case RegInt:
-										dr->data.vInt /= (int) r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "cmp") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vChar > (char) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vChar > (char) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vChar > (char) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vFloat > (float) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vFloat > (float) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vFloat > (float) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vInt > (int) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) inst->reg[srn].data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vInt > (int) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) inst->reg[srn].data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vInt > (int) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) inst->reg[srn].data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										if (inst->reg[drn].data.vChar > (char) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vChar < (char) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (inst->reg[drn].data.vFloat > (float) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vFloat < (float) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (inst->reg[drn].data.vInt > (int) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vInt < (int) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								if (sscanf(src, "%f", &tmp)) {
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vChar > (char) tmp)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) tmp)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vFloat > (float) tmp)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) tmp)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vInt > (int) tmp)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) tmp)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-								} else {
-									return 1;
-								}
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										if (inst->reg[drn].data.vChar > (char) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vChar < (char) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (inst->reg[drn].data.vFloat > (float) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vFloat < (float) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (inst->reg[drn].data.vInt > (int) tmp)
-											inst->state.data.vChar = 1;
-										else if (inst->reg[drn].data.vInt < (int) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (r->type) {
-								case RegChar:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vChar > (char) r->data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) r->data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vFloat > (float) r->data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) r->data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vInt > (int) r->data.vChar)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) r->data.vChar)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vChar > (char) r->data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) r->data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vFloat > (float) r->data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) r->data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vInt > (int) r->data.vFloat)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) r->data.vFloat)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegInt:
-									switch (inst->reg[drn].type) {
-										case RegChar:
-											if (inst->reg[drn].data.vChar > (char) r->data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vChar < (char) r->data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegFloat:
-											if (inst->reg[drn].data.vFloat > (float) r->data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vFloat < (float) r->data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegInt:
-											if (inst->reg[drn].data.vInt > (int) r->data.vInt)
-												inst->state.data.vChar = 1;
-											else if (inst->reg[drn].data.vInt < (int) r->data.vInt)
-												inst->state.data.vChar = -1;
-											else inst->state.data.vChar = 0;
-											inst->state.type = RegChar;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										if (dr->data.vChar > (char) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vChar > (char) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vChar > (char) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										if (dr->data.vFloat > (float) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vFloat > (float) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vFloat > (float) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										if (dr->data.vInt > (int) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) inst->reg[srn].data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vInt > (int) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) inst->reg[srn].data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vInt > (int) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) inst->reg[srn].data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if (sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									if (dr->data.vChar > (char) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vChar < (char) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegFloat:
-									if (dr->data.vFloat > (float) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vFloat < (float) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegInt:
-									if (dr->data.vInt > (int) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vInt < (int) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							if (sscanf(src, "%f", &tmp)) {
-								switch (dr->type) {
-									case RegChar:
-										if (dr->data.vChar > (char) tmp)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vFloat > (float) tmp)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vInt > (int) tmp)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) tmp)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									if (dr->data.vChar > (char) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vChar < (char) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegFloat:
-									if (dr->data.vFloat > (float) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vFloat < (float) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegInt:
-									if (dr->data.vInt > (int) tmp)
-										inst->state.data.vChar = 1;
-									else if (dr->data.vInt < (int) tmp)
-										inst->state.data.vChar = -1;
-									else inst->state.data.vChar = 0;
-									inst->state.type = RegChar;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (r->type) {
-							case RegChar:
-								switch (dr->type) {
-									case RegChar:
-										if (dr->data.vChar > (char) r->data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) r->data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vFloat > (float) r->data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) r->data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vInt > (int) r->data.vChar)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) r->data.vChar)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								switch (dr->type) {
-									case RegChar:
-										if (dr->data.vChar > (char) r->data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) r->data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vFloat > (float) r->data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) r->data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vInt > (int) r->data.vFloat)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) r->data.vFloat)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegInt:
-								switch (dr->type) {
-									case RegChar:
-										if (dr->data.vChar > (char) r->data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vChar < (char) r->data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegFloat:
-										if (dr->data.vFloat > (float) r->data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vFloat < (float) r->data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegInt:
-										if (dr->data.vInt > (int) r->data.vInt)
-											inst->state.data.vChar = 1;
-										else if (dr->data.vInt < (int) r->data.vInt)
-											inst->state.data.vChar = -1;
-										else inst->state.data.vChar = 0;
-										inst->state.type = RegChar;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "jmp") == 0) {
-			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				strcpy(inst->tag, dst);
-			} else return 1;
-		} else if (strcmp(strlwr(head), "jz") == 0) {
-			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (inst->state.data.vChar == 0) strcpy(inst->tag, dst);
-			} else return 1;
-		} else if (strcmp(strlwr(head), "jnz") == 0) {
-			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (inst->state.data.vChar != 0) strcpy(inst->tag, dst);
-			} else return 1;
-		} else if (strcmp(strlwr(head), "jg") == 0) {
-			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (inst->state.data.vChar > 0) strcpy(inst->tag, dst);
-			} else return 1;
-		} else if (strcmp(strlwr(head), "jl") == 0) {
-			if (dst[0] == '[' && dst[strlen(dst) - 1] == ']') {
-				if (inst->state.data.vChar < 0) strcpy(inst->tag, dst);
-			} else return 1;
-		} else if (strcmp(strlwr(head), "and") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							if (inst->reg[drn].type == inst->reg[srn].type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar &= inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt &= inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
-								inst->reg[drn].data.vChar &= tmp;
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								return 1;
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								if (inst->reg[drn].type == RegInt) {
-									inst->reg[drn].data.vInt &= tmp;
-								} else {
-									return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							if (inst->reg[drn].type == r->type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar &= r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt &= r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == inst->reg[srn].type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar &= inst->reg[srn].data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt &= inst->reg[srn].data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp) && dr->type == RegChar) {
-							dr->data.vChar &= tmp;
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							return 1;
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							if (dr->type == RegInt) {
-								dr->data.vInt &= tmp;
-							} else {
-								return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						if (dr->type == r->type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar &= r->data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt &= r->data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "or") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							if (inst->reg[drn].type == inst->reg[srn].type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar |= inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt |= inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
-								inst->reg[drn].data.vChar |= tmp;
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								return 1;
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								if (inst->reg[drn].type == RegInt) {
-									inst->reg[drn].data.vInt |= tmp;
-								} else {
-									return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							if (inst->reg[drn].type == r->type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar |= r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt |= r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == inst->reg[srn].type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar |= inst->reg[srn].data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt |= inst->reg[srn].data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp) && dr->type == RegChar) {
-							dr->data.vChar |= tmp;
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							return 1;
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							if (dr->type == RegInt) {
-								dr->data.vInt |= tmp;
-							} else {
-								return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						if (dr->type == r->type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar |= r->data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt |= r->data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "xor") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							if (inst->reg[drn].type == inst->reg[srn].type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar ^= inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt ^= inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp) && inst->reg[drn].type == RegChar) {
-								inst->reg[drn].data.vChar ^= tmp;
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								return 1;
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								if (inst->reg[drn].type == RegInt) {
-									inst->reg[drn].data.vInt ^= tmp;
-								} else {
-									return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							if (inst->reg[drn].type == r->type) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar ^= r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt ^= r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else return 1;
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						if (dr->type == inst->reg[srn].type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar ^= inst->reg[srn].data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt ^= inst->reg[srn].data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp) && dr->type == RegChar) {
-							dr->data.vChar ^= tmp;
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							return 1;
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							if (dr->type == RegInt) {
-								dr->data.vInt ^= tmp;
-							} else {
-								return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						if (dr->type == r->type) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar ^= r->data.vChar;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt ^= r->data.vInt;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "not") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					switch (inst->reg[drn].type) {
-						case RegChar:
-							inst->reg[drn].data.vChar = ~inst->reg[drn].data.vChar;
-							break;
-						case RegFloat:
-							return 1;
-						case RegInt:
-							inst->reg[drn].data.vInt = ~inst->reg[drn].data.vInt;
-							break;
-						case RegPtr:
-							return 1;
-						default:
-							return 1;
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				switch (dr->type) {
-					case RegChar:
-						dr->data.vChar = ~dr->data.vChar;
-						break;
-					case RegFloat:
-						return 1;
-					case RegInt:
-						dr->data.vInt = ~dr->data.vInt;
-						break;
-					case RegPtr:
-						return 1;
-					default:
-						return 1;
-				}
-			}
-		} else if (strcmp(strlwr(head), "shl") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << tmp;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								return 1;
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << tmp;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (r->type) {
-										case RegChar:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << r->data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar << r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									switch (r->type) {
-										case RegChar:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << r->data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt << r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar = dr->data.vChar << inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vChar = dr->data.vChar << inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								return 1;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt = dr->data.vInt << inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vInt = dr->data.vInt << inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar = dr->data.vChar << tmp;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt = dr->data.vInt << tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							return 1;
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar = dr->data.vChar << tmp;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt = dr->data.vInt << tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (dr->type) {
-							case RegChar:
-								switch (r->type) {
-									case RegChar:
-										dr->data.vChar = dr->data.vChar << r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vChar = dr->data.vChar << r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								return 1;
-							case RegInt:
-								switch (r->type) {
-									case RegChar:
-										dr->data.vInt = dr->data.vInt << r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vInt = dr->data.vInt << r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "shr") == 0) {
-			if (dst[0] == 'r' || dst[0] == 'R') {
-				int drn = -1;
-				sscanf(dst, "%*[rR]%d", &drn);
-				if (drn >= 0 && drn < REG_CNT) {
-					if (src[0] == 'r' || src[0] == 'R') {
-						int srn = -1;
-						sscanf(src, "%*[rR]%d", &srn);
-						if (srn >= 0 && srn < REG_CNT) {
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									switch (inst->reg[srn].type) {
-										case RegChar:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> inst->reg[srn].data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> inst->reg[srn].data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else return 1;
-					} else {
-						if (src[0] == '\'') {
-							if (src[strlen(src) - 1] != '\'') return 1;
-							char tmp = 0;
-							if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> tmp;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							} else {
-								return 1;
-							}
-						} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-							if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-								strchr(src, '.') > 0) {
-								float tmp = 0;
-								return 1;
-							} else {
-								int tmp = 0;
-								if (src[1] == 'x' || src[1] == 'X' || 
-								src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-									sscanf(src, "%x", &tmp);
-								} else {
-									sscanf(src, "%d", &tmp);
-								}
-								switch (inst->reg[drn].type) {
-									case RegChar:
-										inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> tmp;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> tmp;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-							}
-						} else {
-							Register* r = inst->mm->get(inst->mm->p, src);
-							if (r == 0) return 1;
-							switch (inst->reg[drn].type) {
-								case RegChar:
-									switch (r->type) {
-										case RegChar:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> r->data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vChar = inst->reg[drn].data.vChar >> r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									switch (r->type) {
-										case RegChar:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> r->data.vChar;
-											break;
-										case RegFloat:
-											return 1;
-										case RegInt:
-											inst->reg[drn].data.vInt = inst->reg[drn].data.vInt >> r->data.vInt;
-											break;
-										case RegPtr:
-											return 1;
-										default:
-											return 1;
-									}
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					}
-				} else return 1;
-			} else {
-				Register* dr = inst->mm->get(inst->mm->p, dst);
-				if (dr == 0) return 1;
-				if (src[0] == 'r' || src[0] == 'R') {
-					int srn = -1;
-					sscanf(src, "%*[rR]%d", &srn);
-					if (srn >= 0 && srn < REG_CNT) {
-						switch (dr->type) {
-							case RegChar:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vChar = dr->data.vChar >> inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vChar = dr->data.vChar >> inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								return 1;
-							case RegInt:
-								switch (inst->reg[srn].type) {
-									case RegChar:
-										dr->data.vInt = dr->data.vInt >> inst->reg[srn].data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vInt = dr->data.vInt >> inst->reg[srn].data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					} else return 1;
-				} else {
-					if (src[0] == '\'') {
-						if (src[strlen(src) - 1] != '\'') return 1;
-						char tmp = 0;
-						if(sscanf(src, "%*[\']%[^\']c", &tmp)) {
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar = dr->data.vChar >> tmp;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt = dr->data.vInt >> tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						} else {
-							return 1;
-						}
-					} else if (src[0] >= '0' && src[0] <= '9' || src[0] == '-' || src[0] == '+') {
-						if (src[strlen(src) - 1] == 'F' || src[strlen(src) - 1] == 'f' || 
-							strchr(src, '.') > 0) {
-							float tmp = 0;
-							return 1;
-						} else {
-							int tmp = 0;
-							if (src[1] == 'x' || src[1] == 'X' || 
-							src[strlen(src) - 1] == 'h' || src[strlen(src) - 1] == 'H') {
-								sscanf(src, "%x", &tmp);
-							} else {
-								sscanf(src, "%d", &tmp);
-							}
-							switch (dr->type) {
-								case RegChar:
-									dr->data.vChar = dr->data.vChar >> tmp;
-									break;
-								case RegFloat:
-									return 1;
-								case RegInt:
-									dr->data.vInt = dr->data.vInt >> tmp;
-									break;
-								case RegPtr:
-									return 1;
-								default:
-									return 1;
-							}
-						}
-					} else {
-						Register* r = inst->mm->get(inst->mm->p, src);
-						if (r == 0) return 1;
-						switch (dr->type) {
-							case RegChar:
-								switch (r->type) {
-									case RegChar:
-										dr->data.vChar = dr->data.vChar >> r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vChar = dr->data.vChar >> r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegFloat:
-								return 1;
-							case RegInt:
-								switch (r->type) {
-									case RegChar:
-										dr->data.vInt = dr->data.vInt >> r->data.vChar;
-										break;
-									case RegFloat:
-										return 1;
-									case RegInt:
-										dr->data.vInt = dr->data.vInt >> r->data.vInt;
-										break;
-									case RegPtr:
-										return 1;
-									default:
-										return 1;
-								}
-								break;
-							case RegPtr:
-								return 1;
-							default:
-								return 1;
-						}
-					}
-				}
-			}
-		} else if (strcmp(strlwr(head), "run") == 0) {
-			sscanf(var, "%s %[^\n]", head, src);
-			print("[+] %s\n\n", src);
-			run(read(src));
-			print("[-] %s\n\n", src);
-		}  else if (strcmp(strlwr(head), "call") == 0) {
-			sscanf(var, "%s %[^\n]", head, src);
-			call(src, inst);
-		} else if (strcmp(strlwr(head), "end") == 0) {
-			return 0;
-		} else if (strcmp(strlwr(head), "nop") == 0) {
-		#ifdef WINDOWS
-			__asm { nop; }
-		#else
-			__asm__("nop");
-		#endif
-		} else if (strcmp(strlwr(head), "rst") == 0) {
-			
-		} else if (strcmp(strlwr(head), "rem") == 0) {
-			//just rem
-		} else if (head[0] == '[' && head[strlen(head) - 1] == ']') {
-			//jump tag
-		} else {
-			return 1;
+        sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", head, dst, src);
+		int index = getSymbolIndex(funList, head);
+		if (index == ETC) {
+			return verifyTag(head);
 		}
-	}
-	return 0;
+		Register* dr = 0; Register* sr = 0; int dresult = 0, sresult = 0;
+		dresult = getRegister(inst, dst, &dr);
+		if (dresult != OK) {
+			if (dresult == ETC) {
+				dr->readOnly = 1;
+			} else if (index < FUN_NO_OPER_CNT) {
+				dr = 0;
+			} else {
+				if (verifyTag(dst) == OK) {
+					dr = malloc(sizeof(Register));
+					dr->data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
+					dr->type = RegPtr;
+					dr->readOnly = 1;
+					strcpy(dr->data.vPtr, dst);
+				} else return ERR;
+			}
+		}
+		sresult = getRegister(inst, src, &sr);
+		//if (sresult) return ERR;
+		int result = funList[index].fun(inst, dr, sr);
+		if (result == ERR) return ERR;
+		if (result == ETC) return ETC;
+		if (dr != 0) {
+			if (dr->type == RegPtr) {
+				if (verifyTag(dr->data.vPtr) == OK) {
+					free(dr->data.vPtr);
+					free(dr);
+				}
+			}
+			if (dresult == ETC) {
+				if (dr->type == RegPtr) free(dr->data.vPtr);
+				free(dr);
+			}
+		}
+		if (sresult == ETC) {
+			if (sr->type == RegPtr) free(sr->data.vPtr);
+			free(sr);
+		}
+    }
+    return OK;
 }
 
 void compile(char* var) {
@@ -4594,17 +1155,27 @@ void run(char* var) {
 	}
 	
 	if (code != 0) {
-		int prev = 0, codeLines = lines(code);
+		int prev = 0, result = 0, codeLines = lines(code);
 		print("CODE: %d line(s), running...\n\n", codeLines);
 		for (; instance->cnt < codeLines; instance->cnt++) {
 			prev = instance->cnt;
-			if (execute(instance, line(code, instance->cnt), 'c')) {
+			result = execute(instance, line(code, instance->cnt), 'c');
+			if (result == ETC) break;
+			if (result) {
 				print("\nNSASM running error!\n");
 				print("At line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
 			}
 			for (int i = 0; i < codeLines; i++) {
 				if (strcmp(line(code, i), instance->tag) == 0) {
+					for (int j = i + 1; j < codeLines; j++) {
+						if (strcmp(line(code, j), instance->tag) == 0) {
+							print("\nNSASM running error!\n");
+							print("At  [CODE] line %d: %s\n", i, line(code, i));
+							print("And [CODE] line %d: %s\n\n", j, line(code, j));
+							return;
+						}
+					}
 					instance->cnt = i;
 					instance->tag[0] = '\0';
 				}
@@ -4674,16 +1245,26 @@ void call(char* var, Instance* prev) {
 	}
 	
 	if (code != 0) {
-		int prev = 0, codeLines = lines(code);
+		int prev = 0, result = 0, codeLines = lines(code);
 		for (; instance->cnt < codeLines; instance->cnt++) {
 			prev = instance->cnt;
-			if (execute(instance, line(code, instance->cnt), 'c')) {
+			result = execute(instance, line(code, instance->cnt), 'c');
+			if (result == ETC) break;
+			if (result) {
 				print("\nNSASM running error in \"%s\"!\n", var);
 				print("At line %d: %s\n\n", prev + 1, line(code, prev));
 				return;
 			}
 			for (int i = 0; i < codeLines; i++) {
 				if (strcmp(line(code, i), instance->tag) == 0) {
+					for (int j = i + 1; j < codeLines; j++) {
+						if (strcmp(line(code, j), instance->tag) == 0) {
+							print("\nNSASM running error!\n");
+							print("At  [CODE] line %d: %s\n", i, line(code, i));
+							print("And [CODE] line %d: %s\n\n", j, line(code, j));
+							return;
+						}
+					}
 					instance->cnt = i;
 					instance->tag[0] = '\0';
 				}
@@ -4700,15 +1281,87 @@ void call(char* var, Instance* prev) {
 	free(conf); free(data); free(code); free(raw);
 }
 
-char* get(char* src, int start, char* buf, int size) {
-	for (int i = 0; i < size; i++) {
-		if (i == size - 1) {
-			buf[i] = '\0';
-			break;
-		}
-		buf[i] = src[start + i];
+char* read(char* path) {
+	FILE* f = fopen(path, "r");
+	if (f == 0) {
+		print("File open failed.\n");
+		print("At file: %s\n\n", path);
+		return OK;
 	}
-	return buf;
+	int length = 0; char tmp;
+	while (feof(f) == 0) {
+		tmp = fgetc(f);
+		if (tmp != '\r')
+			length += 1;
+	}
+	fclose(f);
+	f = fopen(path, "r");
+	if (f == 0) {
+		print("File open failed.\n");
+		print("At file: %s\n\n", path);
+		return OK;
+	}
+	char* data = malloc(sizeof(char) * (length + 1));
+	length = 0;
+	while (feof(f) == 0) {
+		tmp = fgetc(f);
+		if (tmp != '\r') {
+			data[length] = tmp;
+			length += 1;
+		}
+	}
+	data[length] = '\0';
+	return data;
+}
+
+int lines(char* src) {
+	if(src == 0) return OK;
+	int cnt = 0, length = strlen(src);
+	for (int i = 0; i < length; i++)
+		if (src[i] == '\n') cnt += 1;
+	return cnt;
+}
+
+char* line(char* src, int index) {
+	if (index >= lines(src)) return OK;
+	int srcLen = strlen(src), cnt = 0, pos = 0;
+	char* buf = malloc(sizeof(char) * srcLen);
+	char* result = 0;
+	for (int i = 0; i < srcLen; i++) {
+		if (index == 0) {
+			for (i = 0; src[i] != '\n'; i++)
+				buf[i] = src[i];
+			pos = i + 1;
+			result = malloc(sizeof(char) * (pos));
+			for (i = 0; i < pos; i++) {
+				if (i == pos - 1) {
+					result[i] = '\0';
+					break;
+				}
+				result[i] = buf[i];
+			}
+			free(buf);
+			return result;
+		}
+		if (index == cnt) {
+			pos = i;
+			for (; src[i] != '\n'; i++)
+				buf[i - pos] = src[i];
+			pos = i - pos + 1;
+			result = malloc(sizeof(char) * pos);
+			for (i = 0; i < pos; i++) {
+				if (i == pos - 1) {
+					result[i] = '\0';
+					break;
+				}
+				result[i] = buf[i];
+			}
+			free(buf);
+			return result;
+		}
+		if (src[i] == '\n') cnt += 1;
+	}
+	return OK;
 }
 
 char* cut(char* src, const char* head) {
@@ -4723,7 +1376,7 @@ char* cut(char* src, const char* head) {
 					start = i += 1;
 					for (; i < srcLen; i++) {
 						if (src[i] == '}') break;
-						if (i == srcLen) return 0;
+						if (i == srcLen) return OK;
 						bodyBuf[i - start] = src[i];
 					}
 					break;
@@ -4777,56 +1430,16 @@ char* cut(char* src, const char* head) {
 			return blk;
 		}
 	}
-	return 0;
+	return OK;
 }
 
-int lines(char* src) {
-	if(src == 0) return 0;
-	int cnt = 0, length = strlen(src);
-	for (int i = 0; i < length; i++)
-		if (src[i] == '\n') cnt += 1;
-	return cnt;
-}
-
-char* line(char* src, int index) {
-	if (index >= lines(src)) return 0;
-	int srcLen = strlen(src), cnt = 0, pos = 0;
-	char* buf = malloc(sizeof(char) * srcLen);
-	char* result = 0;
-	for (int i = 0; i < srcLen; i++) {
-		if (index == 0) {
-			for (i = 0; src[i] != '\n'; i++)
-				buf[i] = src[i];
-			pos = i + 1;
-			result = malloc(sizeof(char) * (pos));
-			for (i = 0; i < pos; i++) {
-				if (i == pos - 1) {
-					result[i] = '\0';
-					break;
-				}
-				result[i] = buf[i];
-			}
-			free(buf);
-			return result;
+char* get(char* src, int start, char* buf, int size) {
+	for (int i = 0; i < size; i++) {
+		if (i == size - 1) {
+			buf[i] = '\0';
+			break;
 		}
-		if (index == cnt) {
-			pos = i;
-			for (; src[i] != '\n'; i++)
-				buf[i - pos] = src[i];
-			pos = i - pos + 1;
-			result = malloc(sizeof(char) * pos);
-			for (i = 0; i < pos; i++) {
-				if (i == pos - 1) {
-					result[i] = '\0';
-					break;
-				}
-				result[i] = buf[i];
-			}
-			free(buf);
-			return result;
-		}
-		if (src[i] == '\n') cnt += 1;
+		buf[i] = src[start + i];
 	}
-	return 0;
+	return buf;
 }
-

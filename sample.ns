@@ -7,7 +7,7 @@
 	var a = 1
 	var b = 2.0F
 	var c = 'c'
-	var d = "gensokyo"
+	var d = "gensokyo" * 2
 }
 
 .code {
@@ -30,8 +30,11 @@
 	xor r1, r1
 	pop r1
 	
-	inc d
+	mov r6, d
+	inc r6
 	
+	rem
+	rem hello
 	out 0, "R1: "
 	out 0, r1
 	out 0, '\n'
@@ -51,12 +54,12 @@
 	out 0, '\n'
 	out 0, c
 	out 0, '\n'
-	out 0, d
+	out 0, r6
 	out 0, '\n'
 	
 	out 0, '\n'
 	mov r7, 100
-	call plusonesec.asm
+	call "plusonesec.ns"
 	
 	end
 }
