@@ -11,6 +11,7 @@
 }
 
 .code {
+	jnz [END]
 	mov r1, 1234
 	mov r2, 1.5F
 	mov r3, 0xFF
@@ -48,6 +49,10 @@
 	out 0, r5
 	out 0, '\n'
 	out 0, '\n'
+
+	cmp r2, 0
+	rst
+	
 	out 0, a
 	out 0, '\n'
 	out 0, b
@@ -61,5 +66,6 @@
 	mov r7, 100
 	call "plusonesec.ns"
 	
+[END]
 	end
 }

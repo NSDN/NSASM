@@ -907,7 +907,15 @@ int _fun_nop(Instance* inst, Register* dst, Register* src) {
 	return OK;
 }
 int _fun_rst(Instance* inst, Register* dst, Register* src) {
-	return OK;
+	int stackSiz = 0, heapSiz = 0;
+	stackSiz = inst->mm->p->stackSiz;
+	heapSiz = inst->mm->p->heapSiz;
+	DisposeMemoryManager(inst->mm);
+	inst->mm = InitMemoryManager(stackSiz, heapSiz);
+	memset(inst->reg, 0, sizeof(Register) * REG_CNT);
+	inst->tag[0] = '\0';
+	inst->cnt = -1;
+ 	return OK;
 }
 
 /* -------------------------------- */
