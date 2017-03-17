@@ -228,15 +228,15 @@ int fscan(char* buffer, const char* format, ...) {
 #define VERSION 0.2
 
 typedef enum {
-    RegInt,
-    RegFloat,
+	RegInt,
+	RegFloat,
 	RegChar,
-    RegPtr
+	RegPtr
 } RegType;
 
 typedef struct {
 	char readOnly;
-    RegType type;
+	RegType type;
 	union {
 		char vChar;
 		int vInt;
@@ -543,25 +543,25 @@ char* get(char* src, int start, char* buf, int size);
 /* -------------------------------- */
 
 int nsasm(int argc, char* argv[]) {
-    print("NyaSama Assembly Script Module\n");
-    print("Version: %1.2f\n\n", VERSION);
-    if (argc < 2) {
-        print("Usage: nsasm [c/r] [FILE]\n\n");
-        return OK;
-    } else {
-        if (argc == 3) {
-            if (strchr(argv[1], 'c') > 0) {
+	print("NyaSama Assembly Script Module\n");
+	print("Version: %1.2f\n\n", VERSION);
+	if (argc < 2) {
+		print("Usage: nsasm [c/r] [FILE]\n\n");
+		return OK;
+	} else {
+		if (argc == 3) {
+			if (strchr(argv[1], 'c') > 0) {
 				compile(read(argv[2]));
-                return OK;
-            }
+				return OK;
+			}
 			if (strchr(argv[1], 'r') > 0) {
 				run(read(argv[2]));
 				return OK;
 			}
-        }
+		}
 		run(read(argv[1]));
-        return OK;
-    }
+		return OK;
+	}
 }
 
 /* -------------------------------- */
@@ -1061,7 +1061,7 @@ int execute(Instance* inst, char* var, char type) {
 			free(sr);
 		} else return ERR;
 	} else if (type == 'c') {
-        sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", head, dst, src);
+		sscanf(var, "%s %[^ \t,] %*[, \t]%[^\n]", head, dst, src);
 		int index = getSymbolIndex(funList, head);
 		if (index == ETC) {
 			return verifyTag(head);
@@ -1104,8 +1104,8 @@ int execute(Instance* inst, char* var, char type) {
 			if (sr->type == RegPtr) free(sr->data.vPtr);
 			free(sr);
 		}
-    }
-    return OK;
+	}
+	return OK;
 }
 
 void compile(char* var) {
