@@ -201,7 +201,7 @@ int scan(char* buffer) {
 }
 int fscan(char* buffer, const char* format, ...) {
 	scan(buffer);
-	va_list args = 0;
+	va_list args;
 	va_start(args, format);
 	int result = vsscanf(buffer, format, args);
 	va_end(args);
