@@ -5,6 +5,15 @@
 //#define STM32
 /* ---- DEFINE ---- */
 
+
+
+int nsasm(int argc, char* argv[]);
+
+#include <stdio.h>
+#include <string.h>
+
+#define APP_NAME nsasm
+
 #if defined(WINDOWS)
 #define _CRT_SECURE_NO_WARNINGS
 #else
@@ -21,19 +30,10 @@ char* strlwr(char* s) {
 }
 #endif
 
-#include <stdio.h>
-#include <string.h>
-
-#define OK 0
-#define ERR 1
-#define ETC -1
-
-int nsasm(int argc, char* argv[]);
-
 #if defined(WINDOWS)
 #include <stdlib.h>
 #include <vadefs.h>
-#define clear() system("cls")
+#define clearScreen() system("cls")
 int print(const char* format, ...) {
 	va_list args = 0;
 	__crt_va_start(args, format);
@@ -53,7 +53,7 @@ int fscan(char* buffer, const char* format, ...) {
 
 int main(int argc, char* argv[]) {
 	int result;
-	result = nsasm(argc, argv);
+	result = APP_NAME(argc, argv);
 	system("pause");
 	return result;
 }
@@ -61,7 +61,8 @@ int main(int argc, char* argv[]) {
 #elif defined(LINUX)
 #include <stdlib.h>
 #include <stdarg.h>
-#define clear() system("clear")
+#define IOBUF 128
+#define clearScreen() system("clear")
 int print(const char* format, ...) {
 	va_list args;
 	va_start(args, format);
@@ -99,22 +100,23 @@ int fscan(char* buffer, const char* format, ...) {
 
 int main(int argc, char* argv[]) {
 	int result;
-	result = nsasm(argc, argv);
+	result = APP_NAME(argc, argv);
 	return result;
 }
 
 #elif defined(ARDUINO)
 #include <stdarg.h>
-#define IOBUF 128
 #define BACKCOLOR 0x0000
-#define clear() { tft.setCursor(0, 0); tft.fillScreen(BACKCOLOR); }
+#define __print(buf) tft.print(buf)
+#define clearScreen() { tft.setCursor(0, 0); tft.fillScreen(BACKCOLOR); }
+#define IOBUF 128
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
 	va_start(args, format);
 	int result = vsprintf(iobuf, format, args);
 	va_end(args);
-	tft.print(iobuf);
+	__print(iobuf);
 	free(iobuf);
 	return result;
 }
@@ -126,11 +128,11 @@ int scan(char* buffer) {
 			buffer[count] = Serial.read();
 			if (buffer[count] == 0x08 && count > 0) {
 				count -= 1;
-				tft.print((char)0x08);
+				print("%c", 0x08);
 				continue;
 			}
 			else if (buffer[count] != 0x08) {
-				tft.print(buffer[count]);
+				print("%c", buffer[count]);
 				count += 1;
 			}
 		}
@@ -139,11 +141,11 @@ int scan(char* buffer) {
 			buffer[count] = Serial1.read();
 			if (buffer[count] == 0x08 && count > 0) {
 				count -= 1;
-				tft.print((char)0x08);
+				print("%c", 0x08);
 				continue;
 			}
 			else if (buffer[count] != 0x08) {
-				tft.print(buffer[count]);
+				print("%c", buffer[count]);
 				count += 1;
 			}
 		}
@@ -151,7 +153,7 @@ int scan(char* buffer) {
 	buffer[count] = '\0';
 	if (Serial.available() > 0) Serial.read();
 	else if (Serial1.available() > 0) Serial1.read();
-	tft.println();
+	print("\n");
 }
 int fscan(char* buffer, const char* format, ...) {
 	scan(buffer);
@@ -164,53 +166,38 @@ int fscan(char* buffer, const char* format, ...) {
 
 #elif defined(STM32)
 #include <stdarg.h>
+#define HUART huart2
+#define __print(buf) lcd->printfa(lcd->p, buf)
+#define clearScreen() lcd->clear(lcd->p)
 #define IOBUF 128
-#define BACKCOLOR 0x000000
-#define clear() { tft.setCursor(0, 0); tft.fillScreen(BACKCOLOR); }
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
 	va_start(args, format);
 	int result = vsprintf(iobuf, format, args);
 	va_end(args);
-	tft.print(iobuf);
+	__print(iobuf);
 	free(iobuf);
 	return result;
 }
 int scan(char* buffer) {
-	char count = 0;
-	while (true) {
-		if (Serial.available() > 0) {
-			if (Serial.peek() == '\n') break;
-			buffer[count] = Serial.read();
+	char count = 0, tmp = '\0';
+	while (1) {
+		if (HAL_UART_Receive(&HUART, &tmp, 1, 1) == HAL_OK) {
+			if (tmp == '\n') break;
+			buffer[count] = tmp;
 			if (buffer[count] == 0x08 && count > 0) {
 				count -= 1;
-				tft.print((char)0x08);
+				print("%c", 0x08);
 				continue;
-			}
-			else if (buffer[count] != 0x08) {
-				tft.print(buffer[count]);
-				count += 1;
-			}
-		}
-		else if (Serial1.available() > 0) {
-			if (Serial1.peek() == '\n') break;
-			buffer[count] = Serial1.read();
-			if (buffer[count] == 0x08 && count > 0) {
-				count -= 1;
-				tft.print((char)0x08);
-				continue;
-			}
-			else if (buffer[count] != 0x08) {
-				tft.print(buffer[count]);
+			} else if (buffer[count] != 0x08) {
+				print("%c", buffer[count]);
 				count += 1;
 			}
 		}
 	}
 	buffer[count] = '\0';
-	if (Serial.available() > 0) Serial.read();
-	else if (Serial1.available() > 0) Serial1.read();
-	tft.println();
+	print("\n");
 }
 int fscan(char* buffer, const char* format, ...) {
 	scan(buffer);
@@ -226,6 +213,10 @@ int fscan(char* buffer, const char* format, ...) {
 /* -------------------------------- */
 
 #define VERSION 0.2
+
+#define OK 0
+#define ERR 1
+#define ETC -1
 
 typedef enum {
 	RegInt,
@@ -530,7 +521,7 @@ int getRegister(Instance* inst, char* var, Register** ptr);
 /* -------------------------------- */
 
 int execute(Instance* inst, char* var, char type);
-void compile(char* var);
+void console();
 void run(char* var);
 void call(char* var, Instance* prev);
 
@@ -550,14 +541,14 @@ int nsasm(int argc, char* argv[]) {
 		return OK;
 	} else {
 		if (argc == 3) {
-			if (strchr(argv[1], 'c') > 0) {
-				compile(read(argv[2]));
-				return OK;
-			}
 			if (strchr(argv[1], 'r') > 0) {
 				run(read(argv[2]));
 				return OK;
 			}
+		}
+		if (strchr(argv[1], 'c') > 0) {
+			console();
+			return OK;
 		}
 		run(read(argv[1]));
 		return OK;
@@ -1108,9 +1099,27 @@ int execute(Instance* inst, char* var, char type) {
 	return OK;
 }
 
-void compile(char* var) {
-	if (var == 0) return;
-	print("Note: Compile module is in coding.\n\n");
+void console() {
+	print("Now in console mode.\n");
+	char buf[IOBUF]; int lines = 1, result = 0;
+	Instance* instance = NewInstance(16, 32);
+
+	while (1) {
+		print("\n%d >>> ", lines);
+		scan(buf);
+		
+		if (execute(instance, buf, 'd') == ERR) {
+			result = execute(instance, buf, 'c');
+			if (result == ERR) {
+				print("\nNSASM running error!\n");
+				print("At line %d: %s\n\n", lines, buf);
+				break;
+			} else if (result == ETC) {
+				break;
+			}
+		}
+		lines++;
+	}
 }
 
 void run(char* var) {
