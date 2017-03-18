@@ -1109,7 +1109,6 @@ void console() {
 			if (result == ERR) {
 				print("\nNSASM running error!\n");
 				print("At line %d: %s\n\n", lines, buf);
-				break;
 			} else if (result == ETC) {
 				break;
 			}
