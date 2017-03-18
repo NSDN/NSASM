@@ -477,11 +477,7 @@ typedef struct {
 } Function;
 
 #define FUN_NO_OPER_CNT 4
-#if defined(ARDUINO)
-static Function code funList[] = {
-#else 
 static Function funList[] = {
-#endif
 	{ "rem", &_rem_rem },
 	{ "end", &_fun_end },
 	{ "nop", &_fun_nop },
