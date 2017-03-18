@@ -1103,7 +1103,10 @@ void console() {
 	while (1) {
 		print("\n%d >>> ", lines);
 		scan(buf);
-		
+		if (strlen(buf) == 0) {
+			lines += 1;
+			continue;
+		}
 		if (execute(instance, buf, 'd') == ERR) {
 			result = execute(instance, buf, 'c');
 			if (result == ERR) {
@@ -1113,7 +1116,7 @@ void console() {
 				break;
 			}
 		}
-		lines++;
+		lines += 1;
 	}
 }
 
