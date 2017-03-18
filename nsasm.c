@@ -592,7 +592,7 @@ int _fun_push(Instance* inst, Register* dst, Register* src) {
 }
 int _fun_pop(Instance* inst, Register* dst, Register* src) {
 	if (dst->readOnly) return ERR;
-	return inst->mm->push(inst->mm->p, dst);
+	return inst->mm->pop(inst->mm->p, dst);
 }
 int _fun_in(Instance* inst, Register* dst, Register* src) {
 	return OK;
