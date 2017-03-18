@@ -995,7 +995,7 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 				(*ptr)->data.vPtr[len - 2] = '\0';
 			} else {
 				char* buf = malloc(sizeof(char) * len);
-				if(sscanf(var, "%*[\"]%[^\"]d", buf)) {
+				if(sscanf(var, "%*[\"]%[^\"]s", buf)) {
 					int bufLen = strlen(buf);
 					(*ptr)->data.vPtr = malloc(sizeof(char) * (bufLen * (repeat + 1)));
 					(*ptr)->data.vPtr[0] = '\0';
