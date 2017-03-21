@@ -994,9 +994,12 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 			(*ptr)->type = RegPtr;
 			(*ptr)->readOnly = 1;
 			return ETC;
-		} else if (var[0] >= '0' && var[0] <= '9' || var[0] == '-' || var[0] == '+') {
-			if (var[strlen(var) - 1] == 'F' || var[strlen(var) - 1] == 'f' || 
-				strchr(var, '.') > 0) {
+		} else if (!(var[0] < '0' || var[0] > '9') || var[0] == '-' || var[0] == '+' ||
+					var[strlen(var) - 1] == 'h' || var[strlen(var) - 1] == 'H') {
+			if ((
+					(var[strlen(var) - 1] == 'F' || var[strlen(var) - 1] == 'f') && 
+					(var[1] != 'x' && var[1] != 'X')
+				) || strchr(var, '.') > 0) {
 				float tmp = 0;
 				if (sscanf(var, "%f", &tmp)) {
 					*ptr = malloc(sizeof(Register));
