@@ -1140,7 +1140,7 @@ int execute(Instance* inst, char* var, char type) {
 }
 
 void console() {
-	print("Now in console mode.\n");
+	print("Now in console mode.\n\n");
 	char buf[IOBUF]; int lines = 1, result = 0;
 	Instance* instance = NewInstance(16, 32);
 
