@@ -50,9 +50,18 @@
 	out 0, '\n'
 	out 0, '\n'
 
+	
+	prt "Input 0 or 1 to choose route."
+	out 0, "GO: "
+	mov r0, 0
+	in r0
+	cmp r0, 0
+	jg [NEXT]
+
 	cmp r2, 0
 	rst
 	
+[NEXT]
 	out 0, a
 	out 0, '\n'
 	out 0, b
