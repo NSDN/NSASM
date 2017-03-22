@@ -735,6 +735,7 @@ int __calc__(Register* dst, Register* src, char fun) {
 				case RegPtr:
 					return ERR;
 			}
+			break;
 		case RegFloat:
 			switch (src->type) {
 				case RegChar:
@@ -746,6 +747,7 @@ int __calc__(Register* dst, Register* src, char fun) {
 				case RegPtr:
 					return ERR;
 			}
+			break;
 		case RegInt:
 			switch (src->type) {
 				case RegChar:
@@ -757,6 +759,7 @@ int __calc__(Register* dst, Register* src, char fun) {
 				case RegPtr:
 					return ERR;
 			}
+			break;
 		case RegPtr:
 			switch (src->type) {
 				case RegChar:
@@ -769,6 +772,7 @@ int __calc__(Register* dst, Register* src, char fun) {
 					return ERR;
 			}
 	}
+	return OK;
 }
 int _fun_add(Instance* inst, Register* dst, Register* src) {
 	if (src == 0) return ERR;
