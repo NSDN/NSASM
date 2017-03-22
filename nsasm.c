@@ -612,7 +612,7 @@ int _fun_in(Instance* inst, Register* dst, Register* src) {
 			fscan(buf, "%d", &(dst->data.vInt));
 			break;
 		case RegPtr:
-			fscan(buf, "%s", &(dst->data.vPtr));
+			fscan(buf, "%s", dst->data.vPtr);
 			break;
 	}
 	return OK;
