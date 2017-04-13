@@ -1373,6 +1373,7 @@ char* read(char* path) {
 			length += 1;
 		}
 	}
+	fclose(f);
 	data[length] = '\0';
 	return data;
 }
