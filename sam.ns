@@ -72,9 +72,10 @@
 	out 0, '\n'
 	
 	out 0, '\n'
+
 	mov r7, 100
-	call "plusonesec.ns"
-	
+	call "p1s.ns"
+
 [END]
 	end
 }
