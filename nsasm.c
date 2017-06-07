@@ -61,6 +61,7 @@ int main(int argc, char* argv[]) {
 #elif defined(LINUX)
 #include <stdlib.h>
 #include <stdarg.h>
+//#define BASE_IO
 #define IOBUF 128
 #define clearScreen() system("clear")
 int print(const char* format, ...) {
@@ -78,16 +79,22 @@ char* scan(char* buffer) {
 		buffer[count] = tmp;
 		if (buffer[count] == 0x08 && count > 0) {
 			count -= 1;
-			print("%c", 0x08);
+			#ifdef BASE_IO
+				print("%c", 0x08);
+			#endif
 			continue;
 		}
 		else if (buffer[count] != 0x08) {
-			print("%c", buffer[count]);
+			#ifdef BASE_IO
+				print("%c", buffer[count]);
+			#endif
 			count += 1;
 		}
 	}
 	buffer[count] = '\0';
-	print("\n");
+	#ifdef BASE_IO
+		print("\n");
+	#endif
 }
 int fscan(char* buffer, const char* format, ...) {
 	scan(buffer);
@@ -979,7 +986,7 @@ int verifyTag(char* var) {
 int getRegister(Instance* inst, char* var, Register** ptr) {
 	if (var[0] == 'r' || var[0] == 'R') {
 		int srn = -1;
-		sscanf(var, "%*[rR]%d", &srn);
+		if (sscanf(var, "%*[rR]%d", &srn) == 0) return ERR;
 		if (srn >= 0 && srn < REG_CNT) {
 			*ptr = &(inst->reg[srn]);
 			return OK;
@@ -1103,24 +1110,30 @@ int execute(Instance* inst, char* var, char type) {
 			return verifyTag(head);
 		}
 		Register* dr = 0; Register* sr = 0; int dresult = 0, sresult = 0;
-		dresult = getRegister(inst, dst, &dr);
-		if (dresult != OK) {
-			if (dresult == ETC) {
-				dr->readOnly = 1;
-			} else if (index < FUN_NO_OPER_CNT) {
-				dr = 0;
-			} else {
-				if (verifyTag(dst) == OK) {
-					dr = malloc(sizeof(Register));
-					dr->data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
-					dr->type = RegPtr;
+		dresult = getRegister(inst, var + strlen(head) + 1, &dr);
+		if (dresult == ETC) {
+			dr->readOnly = 1;
+		} else {
+			if (dresult == ERR) free(dr);
+			dresult = getRegister(inst, dst, &dr);
+			if (dresult != OK) {
+				if (dresult == ETC) {
 					dr->readOnly = 1;
-					strcpy(dr->data.vPtr, dst);
-				} else return ERR;
+				} else if (index < FUN_NO_OPER_CNT) {
+					dr = 0;
+				} else {
+					if (verifyTag(dst) == OK) {
+						dr = malloc(sizeof(Register));
+						dr->data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
+						dr->type = RegPtr;
+						dr->readOnly = 1;
+						strcpy(dr->data.vPtr, dst);
+					} else return ERR;
+				}
 			}
+			sresult = getRegister(inst, src, &sr);
+			//if (sresult) return ERR;
 		}
-		sresult = getRegister(inst, src, &sr);
-		//if (sresult) return ERR;
 		int result = funList[index].fun(inst, dr, sr);
 		if (result == ERR) return ERR;
 		if (result == ETC) return ETC;
