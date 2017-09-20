@@ -13,6 +13,7 @@ int nsasm(int argc, char* argv[]);
 #include <string.h>
 
 #define APP_NAME nsasm
+#define IOBUF 128
 
 #if defined(WINDOWS)
 #define _CRT_SECURE_NO_WARNINGS
@@ -61,7 +62,7 @@ int main(int argc, char* argv[]) {
 #elif defined(LINUX)
 #include <stdlib.h>
 #include <stdarg.h>
-#define IOBUF 128
+//#define BASE_IO
 #define clearScreen() system("clear")
 int print(const char* format, ...) {
 	va_list args;
@@ -78,16 +79,22 @@ char* scan(char* buffer) {
 		buffer[count] = tmp;
 		if (buffer[count] == 0x08 && count > 0) {
 			count -= 1;
-			print("%c", 0x08);
+			#ifdef BASE_IO
+				print("%c", 0x08);
+			#endif
 			continue;
 		}
 		else if (buffer[count] != 0x08) {
-			print("%c", buffer[count]);
+			#ifdef BASE_IO
+				print("%c", buffer[count]);
+			#endif
 			count += 1;
 		}
 	}
 	buffer[count] = '\0';
-	print("\n");
+	#ifdef BASE_IO
+		print("\n");
+	#endif
 }
 int fscan(char* buffer, const char* format, ...) {
 	scan(buffer);
@@ -109,7 +116,6 @@ int main(int argc, char* argv[]) {
 #define BACKCOLOR 0x0000
 #define __print(buf) tft.print(buf)
 #define clearScreen() { tft.setCursor(0, 0); tft.fillScreen(BACKCOLOR); }
-#define IOBUF 128
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
@@ -169,7 +175,6 @@ int fscan(char* buffer, const char* format, ...) {
 #define HUART huart2
 #define __print(buf) lcd->printfa(lcd->p, buf)
 #define clearScreen() lcd->clear(lcd->p)
-#define IOBUF 128
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
@@ -977,9 +982,13 @@ int verifyTag(char* var) {
 }
 
 int getRegister(Instance* inst, char* var, Register** ptr) {
+	if (strchr(var, ',') > 0) {
+		if (var[0] != '\'' && var[0] != '\"') return ERR;
+	}
+
 	if (var[0] == 'r' || var[0] == 'R') {
 		int srn = -1;
-		sscanf(var, "%*[rR]%d", &srn);
+		if (sscanf(var, "%*[rR]%d", &srn) == 0) return ERR;
 		if (srn >= 0 && srn < REG_CNT) {
 			*ptr = &(inst->reg[srn]);
 			return OK;
@@ -1032,6 +1041,7 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 					for (int i = 0; i < repeat; i++) {
 						strcat((*ptr)->data.vPtr, buf);
 					}
+					free(buf);
 				} else return ERR;
 				free(buf);
 			}
@@ -1067,9 +1077,10 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 				return ETC;
 			}
 		} else {
-			char tmp[strlen(var)];
+			char* tmp = malloc(sizeof(char) * strlen(var));
 			sscanf(var, "%[^ \t]s", tmp);
 			Register* r = inst->mm->get(inst->mm->p, tmp);
+			free(tmp);
 			if (r == 0) return ERR;
 			*ptr = r;
 			return OK;
@@ -1103,24 +1114,30 @@ int execute(Instance* inst, char* var, char type) {
 			return verifyTag(head);
 		}
 		Register* dr = 0; Register* sr = 0; int dresult = 0, sresult = 0;
-		dresult = getRegister(inst, dst, &dr);
-		if (dresult != OK) {
-			if (dresult == ETC) {
-				dr->readOnly = 1;
-			} else if (index < FUN_NO_OPER_CNT) {
-				dr = 0;
-			} else {
-				if (verifyTag(dst) == OK) {
-					dr = malloc(sizeof(Register));
-					dr->data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
-					dr->type = RegPtr;
+		dresult = getRegister(inst, var + strlen(head) + 1, &dr);
+		if (dresult == ETC) {
+			dr->readOnly = 1;
+		} else {
+			if (dresult == ERR) free(dr);
+			dresult = getRegister(inst, dst, &dr);
+			if (dresult != OK) {
+				if (dresult == ETC) {
 					dr->readOnly = 1;
-					strcpy(dr->data.vPtr, dst);
-				} else return ERR;
+				} else if (index < FUN_NO_OPER_CNT) {
+					dr = 0;
+				} else {
+					if (verifyTag(dst) == OK) {
+						dr = malloc(sizeof(Register));
+						dr->data.vPtr = malloc(sizeof(char) * (strlen(dst) + 1));
+						dr->type = RegPtr;
+						dr->readOnly = 1;
+						strcpy(dr->data.vPtr, dst);
+					} else return ERR;
+				}
 			}
+			sresult = getRegister(inst, src, &sr);
+			//if (sresult) return ERR;
 		}
-		sresult = getRegister(inst, src, &sr);
-		//if (sresult) return ERR;
 		int result = funList[index].fun(inst, dr, sr);
 		if (result == ERR) return ERR;
 		if (result == ETC) return ETC;
