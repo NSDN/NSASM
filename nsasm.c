@@ -1042,8 +1042,10 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 						strcat((*ptr)->data.vPtr, buf);
 					}
 					free(buf);
-				} else return ERR;
-				free(buf);
+				} else {
+					free(buf);
+					return ERR;
+				}
 			}
 			(*ptr)->type = RegPtr;
 			(*ptr)->readOnly = 1;
