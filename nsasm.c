@@ -13,6 +13,7 @@ int nsasm(int argc, char* argv[]);
 #include <string.h>
 
 #define APP_NAME nsasm
+#define IOBUF 128
 
 #if defined(WINDOWS)
 #define _CRT_SECURE_NO_WARNINGS
@@ -62,7 +63,6 @@ int main(int argc, char* argv[]) {
 #include <stdlib.h>
 #include <stdarg.h>
 //#define BASE_IO
-#define IOBUF 128
 #define clearScreen() system("clear")
 int print(const char* format, ...) {
 	va_list args;
@@ -116,7 +116,6 @@ int main(int argc, char* argv[]) {
 #define BACKCOLOR 0x0000
 #define __print(buf) tft.print(buf)
 #define clearScreen() { tft.setCursor(0, 0); tft.fillScreen(BACKCOLOR); }
-#define IOBUF 128
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
@@ -176,7 +175,6 @@ int fscan(char* buffer, const char* format, ...) {
 #define HUART huart2
 #define __print(buf) lcd->printfa(lcd->p, buf)
 #define clearScreen() lcd->clear(lcd->p)
-#define IOBUF 128
 int print(const char* format, ...) {
 	char* iobuf = malloc(sizeof(char) * IOBUF);
 	va_list args;
@@ -984,6 +982,10 @@ int verifyTag(char* var) {
 }
 
 int getRegister(Instance* inst, char* var, Register** ptr) {
+	if (strchr(var, ',') > 0) {
+		if (var[0] != '\'' && var[0] != '\"') return ERR;
+	}
+
 	if (var[0] == 'r' || var[0] == 'R') {
 		int srn = -1;
 		if (sscanf(var, "%*[rR]%d", &srn) == 0) return ERR;
@@ -1074,9 +1076,10 @@ int getRegister(Instance* inst, char* var, Register** ptr) {
 				return ETC;
 			}
 		} else {
-			char tmp[strlen(var)];
+			char* tmp = malloc(sizeof(char) * strlen(var));
 			sscanf(var, "%[^ \t]s", tmp);
 			Register* r = inst->mm->get(inst->mm->p, tmp);
+			free(tmp);
 			if (r == 0) return ERR;
 			*ptr = r;
 			return OK;
