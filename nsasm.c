@@ -217,7 +217,7 @@ int fscan(char* buffer, const char* format, ...) {
 
 /* -------------------------------- */
 
-#define VERSION 0.2
+#define VERSION 0.21
 
 #define OK 0
 #define ERR 1
