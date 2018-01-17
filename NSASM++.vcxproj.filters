@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="NSASM">
+      <UniqueIdentifier>{348bea21-ff3f-424f-aa0c-087ca5ff7c44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Util">
+      <UniqueIdentifier>{a87f32df-2885-4a0d-ab47-cd5e8ec04df8}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="NSASM.cpp">
+      <Filter>NSASM</Filter>
+    </ClCompile>
+    <ClCompile Include="Util.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Launcher.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="NSASM.h">
+      <Filter>NSASM</Filter>
+    </ClInclude>
+    <ClInclude Include="Util.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
