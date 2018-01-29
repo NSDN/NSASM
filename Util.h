@@ -33,10 +33,8 @@ namespace NSASM {
 
 		Util() {
 			Output = [](string str) -> void { cout << str; };
-			Input = [](void) -> string { string s = ""; cin >> s; return s; };
-			FileInput = [](string path) -> string {
-				return "";
-			};
+			Input = [](void) -> string { string s = ""; getline(cin, s); return s; };
+			FileInput = [](string path) -> string { return ""; };
 		}
 
 	public:
@@ -57,8 +55,10 @@ namespace NSASM {
 		}
 
 	public:
-		template<typename T>
-		static void print(T value);
+		static void print(int value);
+		static void print(char value);
+		static void print(float value);
+		static void print(string value);
 		static string scan();
 		static void cleanSymbol(string& var, string symbol, string trash);
 		static void cleanSymbol(string& var, string symbol, string trashA, string trashB);

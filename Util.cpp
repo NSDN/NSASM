@@ -4,11 +4,23 @@
 
 namespace NSASM {
 
-	template<typename T>
-	void Util::print(T value) {
+	void Util::print(int value) {
 		stringstream parser;
 		parser << value;
 		I().Output(parser.str());
+	}
+	void Util::print(char value) {
+		stringstream parser;
+		parser << value;
+		I().Output(parser.str());
+	}
+	void Util::print(float value) {
+		stringstream parser;
+		parser << value;
+		I().Output(parser.str());
+	}
+	void Util::print(string value) {
+		I().Output(value);
 	}
 
 	string Util::scan() {

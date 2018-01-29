@@ -14,7 +14,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		const string version = "0.42";
+		static string ver() { return "0.42"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
