@@ -48,22 +48,24 @@ namespace NSASM {
 			var = var.substr(1);
 			if (var.length() == 0) return nulstr;
 		}
+		while (var[var.length() - 1] == '\t' || var[var.length() - 1] == ' ') {
+			var = var.substr(0, var.length() - 1);
+			if (var.length() == 0) return nulstr;
+		}
 
 		string left, right; size_t pos;
-		if (pos = var.find("\'") != var.npos) {
+		if ((pos = var.find("\'")) != var.npos) {
 			left = var.substr(0, pos);
 			right = var.substr(left.length());
-		}
-		else if (pos = var.find("\"") != var.npos) {
+		} else if ((pos = var.find("\"")) != var.npos) {
 			left = var.substr(0, pos);
 			right = var.substr(left.length());
-			if (pos = right.substr(1).find("\"") != right.npos && (pos + 1) < right.length()) {
+			if ((pos = right.substr(1).find("\"")) != right.npos && (pos + 1) < right.length()) {
 				if (right.find("*", pos + 1) != right.npos) {
 					cleanSymbol(right, "*", "\t", " ");
 				}
 			}
-		}
-		else {
+		} else {
 			left = var;
 			right = "";
 		}
@@ -245,8 +247,7 @@ namespace NSASM {
 				getline(reader, tmp);
 				str += (tmp + "\n");
 			}
-		}
-		catch (exception e) {
+		} catch (exception e) {
 			print("File read error.\n");
 			print("At file: " + path + "\n\n");
 			return nulstr;
@@ -273,7 +274,7 @@ namespace NSASM {
 			try {
 				while (!reader.eof()) {
 					getline(reader, buf);
-					if (pos = buf.find(' ') != buf.npos) {
+					if ((pos = buf.find(' ')) != buf.npos) {
 						head = buf.substr(0, pos);
 						parser.clear();
 						parser << buf.substr(pos + 1);
@@ -281,10 +282,8 @@ namespace NSASM {
 						else if (head == "stack") parser >> stack;
 						else if (head == "reg") parser >> regs;
 					}
-
 				}
-			}
-			catch (exception e) {
+			} catch (exception e) {
 				print("Conf load error.\n");
 				print("At file: " + path + "\n\n");
 				return;
@@ -315,7 +314,7 @@ namespace NSASM {
 			try {
 				while (!reader.eof()) {
 					getline(reader, buf);
-					if (pos = buf.find(' ') != buf.npos) {
+					if ((pos = buf.find(' ')) != buf.npos) {
 						head = buf.substr(0, pos);
 						parser.clear();
 						parser << buf.substr(pos + 1);
@@ -323,10 +322,8 @@ namespace NSASM {
 						else if (head == "stack") parser >> stack;
 						else if (head == "reg") parser >> regs;
 					}
-
 				}
-			}
-			catch (exception e) {
+			} catch (exception e) {
 				print("Conf load error.\n");
 				print("At file: " + path + "\n\n");
 				return;

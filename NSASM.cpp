@@ -66,7 +66,7 @@ namespace NSASM {
 		case WordType::WD_STR:
 			size_t pos; bool state;
 			state = verifyBound(var, '\"', '\"');
-			if (pos = var.find('\"') != var.npos) {
+			if ((pos = var.find('\"')) != var.npos) {
 				if (var.find('\"', pos + 1) != var.npos) {
 					state |= var.find('*') != var.npos;
 				}
@@ -146,7 +146,7 @@ namespace NSASM {
 			} else if (verifyWord(var, WordType::WD_STR)) {
 				if (var.length() < 3) return nullptr;
 				string tmp, rep; size_t pos;
-				if (pos = var.find("\"*") != var.npos) {
+				if ((pos = var.find("\"*")) != var.npos) {
 					tmp = rep = var.substr(0, pos).substr(1);
 					Register* repeat = getRegister(var.substr(pos + 2));
 					if (repeat == nullptr) return nullptr;
@@ -374,7 +374,7 @@ namespace NSASM {
 		string op, dst, src; size_t pos;
 		Register* dr = nullptr; Register* sr = nullptr;
 
-		if (pos = var.find(' ') != var.npos)
+		if ((pos = var.find(' ')) != var.npos)
 			op = var.substr(0, pos);
 		else op = var;
 		transform(op.begin(), op.end(), op.begin(), tolower); // To lower case
@@ -385,7 +385,7 @@ namespace NSASM {
 			) {
 				// Variable define
 				dst = var.substr(op.length() + 1);
-				if (pos = dst.find('=') != var.npos)
+				if ((pos = dst.find('=')) != var.npos)
 					dst = dst.substr(0, pos);
 				if (var.length() <= op.length() + 1 + dst.length()) return Result::RES_ERR;
 				if (var[op.length() + 1 + dst.length()] == '=')
@@ -404,7 +404,7 @@ namespace NSASM {
 					src = "";
 				} else {
 					dst = var.substr(op.length() + 1);
-					if (pos = dst.find(',') != var.npos)
+					if ((pos = dst.find(',')) != var.npos)
 						dst = dst.substr(0, pos);
 					if (var.length() <= op.length() + 1 + dst.length())
 						src = "";
@@ -421,7 +421,10 @@ namespace NSASM {
 			return verifyWord(op, WordType::WD_TAG) ? Result::RES_OK : Result::RES_ERR;
 
 		prevDstReg = (dr != nullptr) ? *dr : prevDstReg;
-		return funcList[op](dr, sr);
+
+		Result res = funcList[op](dr, sr);
+		if (dr->gcFlag) _gc(dr); if (sr->gcFlag) _gc(sr);
+		return res;
 	}
 	NSASM::Register* NSASM::run() {
 		if (code.empty()) return nullptr;
@@ -512,7 +515,73 @@ namespace NSASM {
 	}
 
 	void NSASM::loadFuncList() {
-		
+#define OP [&](Register* dst, Register* src) -> Result
+
+		funcList["rem"] = OP {
+			return Result::RES_OK;
+		};
+
+		funcList["var"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_STR) src->readOnly = false;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+		funcList["int"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_INT) return Result::RES_ERR;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+		funcList["char"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_CHAR) return Result::RES_ERR;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+		funcList["float"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_FLOAT) return Result::RES_ERR;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+		funcList["str"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_STR) return Result::RES_ERR;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+		funcList["code"] = OP {
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
+			heapManager[dst->data.s] = *src;
+			return Result::RES_OK;
+		};
+
+#undef OP
 	}
 
 }

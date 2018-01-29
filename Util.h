@@ -40,7 +40,7 @@ namespace NSASM {
 	public:
 		static inline void replace(string& var, string src, string dst) {
 			size_t pos, begin = -1;
-			while (pos = var.find(src) != var.npos) {
+			while ((pos = var.find(src)) != var.npos) {
 				var = var.replace(pos, (src).length(), dst);
 				if (begin == -1) begin = pos;
 				else if (pos == begin) break;
@@ -49,8 +49,8 @@ namespace NSASM {
 
 		static inline void cycleReplace(string& var, string src, string dst) {
 			size_t pos;
-			while (pos = var.find(src) != var.npos) {
-				var = var.replace(pos, (src).length(), dst);
+			while ((pos = var.find(src)) != var.npos) {
+				var = var.replace(pos, src.length(), dst);
 			}
 		}
 

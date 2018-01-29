@@ -14,7 +14,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.42"; }
+		static string ver() { return "0.43"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
@@ -30,7 +30,10 @@ namespace NSASM {
 				this->type = RegType::REG_INT;
 				this->readOnly = false;
 				this->gcFlag = false;
+				this->data.c = 0;
 				this->data.i = 0;
+				this->data.f = 0;
+				this->data.s = "";
 			}
 			Register(const Register& reg) {
 				this->gcFlag = false;
