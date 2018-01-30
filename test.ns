@@ -15,6 +15,7 @@
     prt "\n"
     out "r0 is "
     prt r0
+    out "\npress any key..."
 	mov r1, " "
 	in r1
     end
