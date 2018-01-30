@@ -8,11 +8,11 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
 	NSASM::Util::I().FileInput = [](string path) -> string {
-		ifstream reader; stringstream str; char c;
+		ifstream reader; stringstream str; string buf;
 		reader.open(path, ifstream::in); str.clear();
 		while (!reader.eof()) {
-			reader >> c;
-			str << c;
+			getline(reader, buf);
+			str << buf << endl;
 		}
 		reader.close();
 		return str.str();

@@ -192,8 +192,10 @@ namespace NSASM {
 						count += 1;
 					else if (tmp.find("}") != tmp.npos)
 						count -= 1;
-					if (tmp.find("(") != tmp.npos && tmp.find(")") != tmp.npos)
-						count -= 1;
+					if (tmp.find("(") != tmp.npos && tmp.find(")") != tmp.npos) {
+						if (tmp.find("{") != tmp.npos && tmp.find("}") != tmp.npos) 
+							count -= 1;
+					}
 					if (count == 0) {
 						segs[head] = body;
 						state = IDLE;
@@ -208,7 +210,7 @@ namespace NSASM {
 
 		hash<string> strHash;
 		stringstream s;
-		s << strHash(var);
+		s << hex << strHash(var);
 		segs["_pub_" + s.str()] = pub;
 
 		return segs;
@@ -216,11 +218,11 @@ namespace NSASM {
 
 	string Util::getSegment(string var, string head) {
 		map<string, string> segs = getSegments(var);
-		string seg = "";
+		string seg = "nop";
 
 		for (auto it = segs.begin(); it != segs.end(); it++) {
 			if (it->first == head) {
-				if (seg.size() == 0)
+				if (seg == "nop")
 					seg = it->second;
 				else
 					return nulstr;
@@ -234,8 +236,7 @@ namespace NSASM {
 		stringstream reader;
 		try {
 			reader << I().FileInput(path);
-		}
-		catch (exception e) {
+		} catch (exception e) {
 			print("File open failed.\n");
 			print("At file: " + path + "\n\n");
 			return nulstr;

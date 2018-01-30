@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <stack>
 #include <map>
 
 #define nulstr ""
@@ -39,15 +40,17 @@ namespace NSASM {
 
 	public:
 		static inline void replace(string& var, string src, string dst) {
-			size_t pos, begin = -1;
-			while ((pos = var.find(src)) != var.npos) {
-				var = var.replace(pos, (src).length(), dst);
-				if (begin == -1) begin = pos;
-				else if (pos == begin) break;
+			size_t pos = 0; stack<size_t> s;
+			while ((pos = var.find(src, pos)) != var.npos) {
+				s.push(pos); pos += 1;
+			}	
+			while (!s.empty()) {
+				var = var.replace(s.top(), src.length(), dst); s.pop();
 			}
 		}
 
 		static inline void cycleReplace(string& var, string src, string dst) {
+			if (dst.find(src) != dst.npos) return;
 			size_t pos;
 			while ((pos = var.find(src)) != var.npos) {
 				var = var.replace(pos, src.length(), dst);

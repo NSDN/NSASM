@@ -8,7 +8,7 @@ inline T* _gc(T* v) { delete v; return nullptr; }
 
 namespace NSASM {
 
-	NSASM::NSASM(int heapSize, int stackSize, int regCnt, map<string, string> code) {
+	NSASM::NSASM(int heapSize, int stackSize, int regCnt, map<string, string>& code) {
 		heapManager.clear();
 		stackManager.empty();
 
@@ -17,7 +17,7 @@ namespace NSASM {
 		
 		stateReg.type = RegType::REG_INT;
 		stateReg.readOnly = false;
-		stateReg.data.i = 0;
+		stateReg.n.i = 0;
 
 		backupReg.empty();
 		progSeg = 0; progCnt = 0;
@@ -28,21 +28,22 @@ namespace NSASM {
 			ptr = new Register();
 			ptr->type = RegType::REG_INT;
 			ptr->readOnly = false;
-			ptr->data.i = 0;
+			ptr->n.i = 0;
 			regGroup.push_back(*ptr);
 		}
 
 		funcList.clear();
 		loadFuncList();
 
-		code.clear();
+		segs.clear();
+		this->code.clear();
 		if (appendCode(code) == Result::RES_ERR) {
 			string path = "_main_";
 			Util::print("At file: " + path + "\n\n");
 			code.clear();
 		}
 	}
-	NSASM::NSASM(NSASM super, map<string, string> code) : NSASM::NSASM(super.heapSize, super.stackSize, super.regGroup.size(), code) {
+	NSASM::NSASM(NSASM& super, map<string, string>& code) : NSASM::NSASM(super.heapSize, super.stackSize, super.regGroup.size(), code) {
 		copyRegGroup(super);
 	}
 	NSASM::~NSASM() {
@@ -142,7 +143,7 @@ namespace NSASM {
 				reg->type = RegType::REG_CHAR;
 				reg->readOnly = true;
 				reg->gcFlag = true;
-				reg->data.c = tmp;
+				reg->n.c = tmp;
 			} else if (verifyWord(var, WordType::WD_STR)) {
 				if (var.length() < 3) return nullptr;
 				string tmp, rep; size_t pos;
@@ -154,7 +155,7 @@ namespace NSASM {
 						if (repeat->gcFlag) return _gc(repeat);
 						else return nullptr;
 					}
-					for (int i = 1; i < repeat->data.i; i++)
+					for (int i = 1; i < repeat->n.i; i++)
 						tmp += rep;
 					if (repeat->gcFlag) _gc(repeat);
 				} else {
@@ -166,7 +167,7 @@ namespace NSASM {
 				reg->type = RegType::REG_STR;
 				reg->readOnly = true;
 				reg->gcFlag = true;
-				reg->data.s = tmp;
+				reg->s = tmp;
 			} else if (verifyWord(var, WordType::WD_INT)) {
 				int tmp; string buf = var;
 				if (
@@ -188,7 +189,7 @@ namespace NSASM {
 				reg->type = RegType::REG_INT;
 				reg->readOnly = true;
 				reg->gcFlag = true;
-				reg->data.i = tmp;
+				reg->n.i = tmp;
 			} else if (verifyWord(var, WordType::WD_FLOAT)) {
 				float tmp; string buf = var;
 				Util::replace(buf, "f", ""); Util::replace(buf, "F", "");
@@ -198,13 +199,13 @@ namespace NSASM {
 				reg->type = RegType::REG_FLOAT;
 				reg->readOnly = true;
 				reg->gcFlag = true;
-				reg->data.f = tmp;
+				reg->n.f = tmp;
 			} else if (verifyWord(var, WordType::WD_TAG) || verifyWord(var, WordType::WD_SEG)) {
 				reg = new Register();
 				reg->type = RegType::REG_STR;
 				reg->readOnly = true;
 				reg->gcFlag = true;
-				reg->data.s = var;
+				reg->s = var;
 			} else if (verifyWord(var, WordType::WD_CODE)) {
 				string code = var.substr(1, var.length() - 2);
 
@@ -213,7 +214,7 @@ namespace NSASM {
 				reg->readOnly = true;
 				reg->gcFlag = true;
 				Util::decodeLambda(code);
-				reg->data.s = code;
+				reg->s = code;
 			} else return nullptr;
 
 			return reg;
@@ -228,8 +229,17 @@ namespace NSASM {
 		}
 		return result;
 	}
-	NSASM::Result NSASM::appendCode(map<string, string> code) {
+	NSASM::Result NSASM::appendCode(map<string, string>& code) {
 		if (code.size() == 0) return Result::RES_OK;
+		if (this->code.empty()) { // Load pub seg
+			for (auto it = code.begin(); it != code.end(); it++) {
+				if (it->first.find("_pub_") == 0) {
+					this->segs.push_back(it->first);
+					this->code[it->first] = convToArray(it->second);
+					break;
+				}
+			}
+		}
 		for (auto it = code.begin(); it != code.end(); it++) {
 			if (it->first[0] == '.') continue; // This is conf seg
 			if (it->first[0] == '@') { // This is override seg
@@ -238,6 +248,7 @@ namespace NSASM {
 					Util::print("At " + it->first.substr(1) + "\n");
 					return Result::RES_ERR;
 				}
+				this->segs.push_back(it->first.substr(1));
 				this->code[it->first.substr(1)] = convToArray(it->second);
 			} else {
 				if (this->code.count(it->first) > 0) {
@@ -246,12 +257,13 @@ namespace NSASM {
 					Util::print("At " + it->first + "\n");
 					return Result::RES_ERR;
 				}
+				this->segs.push_back(it->first);
 				this->code[it->first] = convToArray(it->second);
 			}
 		}
 		return Result::RES_OK;
 	}
-	void NSASM::copyRegGroup(NSASM super) {
+	void NSASM::copyRegGroup(NSASM& super) {
 		for (int i = 0; i < super.regGroup.size(); i++)
 			this->regGroup[i] = super.regGroup[i];
 	}
@@ -300,8 +312,8 @@ namespace NSASM {
 	}
 	NSASM::Result NSASM::calc(Register* dst, int src, char type) {
 		switch (type) {
-		case '+': dst->strPtr += src; break;
-		case '-': dst->strPtr -= src; break;
+		case '+': dst->sp += src; break;
+		case '-': dst->sp -= src; break;
 		default: return Result::RES_ERR;
 		}
 		return Result::RES_OK;
@@ -311,11 +323,11 @@ namespace NSASM {
 		case RegType::REG_CHAR:
 			switch (src->type) {
 			case RegType::REG_CHAR:
-				return calc(&dst->data.c, src->data.c, type);
+				return calc(&dst->n.c, src->n.c, type);
 			case RegType::REG_FLOAT:
-				return calc(&dst->data.c, src->data.f, type);
+				return calc(&dst->n.c, src->n.f, type);
 			case RegType::REG_INT:
-				return calc(&dst->data.c, src->data.i, type);
+				return calc(&dst->n.c, src->n.i, type);
 			case RegType::REG_STR:
 				return Result::RES_ERR;
 			}
@@ -323,11 +335,11 @@ namespace NSASM {
 		case RegType::REG_FLOAT:
 			switch (src->type) {
 			case RegType::REG_CHAR:
-				return calc(&dst->data.f, src->data.c, type);
+				return calc(&dst->n.f, src->n.c, type);
 			case RegType::REG_FLOAT:
-				return calc(&dst->data.f, src->data.f, type);
+				return calc(&dst->n.f, src->n.f, type);
 			case RegType::REG_INT:
-				return calc(&dst->data.f, src->data.i, type);
+				return calc(&dst->n.f, src->n.i, type);
 			case RegType::REG_STR:
 				return Result::RES_ERR;
 			}
@@ -335,11 +347,11 @@ namespace NSASM {
 		case RegType::REG_INT:
 			switch (src->type) {
 			case RegType::REG_CHAR:
-				return calc(&dst->data.i, src->data.c, type);
+				return calc(&dst->n.i, src->n.c, type);
 			case RegType::REG_FLOAT:
-				return calc(&dst->data.i, src->data.f, type);
+				return calc(&dst->n.i, src->n.f, type);
 			case RegType::REG_INT:
-				return calc(&dst->data.i, src->data.i, type);
+				return calc(&dst->n.i, src->n.i, type);
 			case RegType::REG_STR:
 				return Result::RES_ERR;
 			}
@@ -347,11 +359,11 @@ namespace NSASM {
 		case RegType::REG_STR:
 			switch (src->type) {
 			case RegType::REG_CHAR:
-				return calc(dst, src->data.c, type);
+				return calc(dst, src->n.c, type);
 			case RegType::REG_FLOAT:
 				return Result::RES_ERR;
 			case RegType::REG_INT:
-				return calc(dst, src->data.i, type);
+				return calc(dst, src->n.i, type);
 			case RegType::REG_STR:
 				return Result::RES_ERR;
 			}
@@ -363,7 +375,7 @@ namespace NSASM {
 	NSASM::Register* NSASM::eval(Register* reg) {
 		if (reg == nullptr) return nullptr;
 		if (reg->type != RegType::REG_CODE) return nullptr;
-		map<string, string> code = Util::getSegments(reg->data.s);
+		map<string, string> code = Util::getSegments(reg->s);
 		NSASM nsasm(*this, code);
 		Register* result = new Register(*nsasm.run());
 		result->gcFlag = true;
@@ -392,7 +404,7 @@ namespace NSASM {
 					src = var.substr(op.length() + 1 + dst.length() + 1);
 				else src = "";
 				dr = new Register(); dr->gcFlag = true;
-				dr->readOnly = true; dr->type = RegType::REG_STR; dr->data.s = dst;
+				dr->readOnly = true; dr->type = RegType::REG_STR; dr->s = dst;
 				sr = getRegister(src);
 			} else {
 				// Normal code
@@ -423,42 +435,42 @@ namespace NSASM {
 		prevDstReg = (dr != nullptr) ? *dr : prevDstReg;
 
 		Result res = funcList[op](dr, sr);
-		if (dr->gcFlag) _gc(dr); if (sr->gcFlag) _gc(sr);
+		if (dr != nullptr) if (dr->gcFlag) _gc(dr); 
+		if (sr != nullptr) if (sr->gcFlag) _gc(sr);
 		return res;
 	}
 	NSASM::Register* NSASM::run() {
 		if (code.empty()) return nullptr;
-		Result result; auto it = code.begin();
+		Result result; string seg;
 
 		progSeg = progCnt = 0;
 
-		for (; progSeg < code.size(); progSeg++) {
-			it = code.begin(); for (int i = 0; i < progSeg; i++) it++;
-			if (it->second.empty()) continue;
+		for (; progSeg < segs.size(); progSeg++) {
+			seg = segs[progSeg];
+			if (code[seg].empty()) continue;
 
-			for (; progCnt < it->second.size(); progCnt++) {
+			for (; progCnt < code[seg].size(); progCnt++) {
 				if (tmpSeg >= 0 || tmpCnt >= 0) {
 					progSeg = tmpSeg; progCnt = tmpCnt;
 					tmpSeg = -1; tmpCnt = -1;
 				}
 
-				it = code.begin(); for (int i = 0; i < progSeg; i++) it++;
-				if (it->second.empty()) break;
+				seg = segs[progSeg];
+				if (code[seg].empty()) continue;
 
-				if (it->second[progCnt].length() == 0) continue;
+				if (code[seg][progCnt].length() == 0) continue;
 
-				result = execute(it->second[progCnt]);
+				result = execute(code[seg][progCnt]);
 				if (result == Result::RES_ERR) {
 					Util::print("\nNSASM running error!\n");
-					Util::print("At " + it->first + ", line ");
+					Util::print("At " + seg + ", line ");
 					Util::print(progCnt + 1);
-					Util::print(": " + it->second[progCnt] + "\n\n");
+					Util::print(": " + code[seg][progCnt] + "\n\n");
 					return nullptr;
 				} else if (result == Result::RES_ETC) {
 					prevDstReg.readOnly = false;
 					return &prevDstReg;
 				}
-					
 			}
 
 			if (!backupReg.empty()) {
@@ -471,7 +483,7 @@ namespace NSASM {
 		return &prevDstReg;
 	}
 	void NSASM::call(string segName) {
-		Result result; auto it = code.begin();
+		Result result; string seg;
 
 		int pos = 0;
 		for (auto seg = code.begin(); seg != code.end(); seg++) {
@@ -482,29 +494,32 @@ namespace NSASM {
 			} else pos++;
 		}
 
-		for (; progSeg < code.size(); progSeg++) {
-			it = code.begin(); for (int i = 0; i < progSeg; i++) it++;
-			if (it->second.empty()) continue;
+		for (; progSeg < segs.size(); progSeg++) {
+			seg = segs[progSeg];
+			if (code[seg].empty()) continue;
 
-			for (; progCnt < it->second.size(); progCnt++) {
+			for (; progCnt < code[seg].size(); progCnt++) {
 				if (tmpSeg >= 0 || tmpCnt >= 0) {
 					progSeg = tmpSeg; progCnt = tmpCnt;
 					tmpSeg = -1; tmpCnt = -1;
 				}
 
-				it = code.begin(); for (int i = 0; i < progSeg; i++) it++;
-				if (it->second.empty()) break;
+				seg = segs[progSeg];
+				if (code[seg].empty()) continue;
 
-				if (it->second[progCnt].length() == 0) continue;
+				if (code[seg][progCnt].length() == 0) continue;
 
-				result = execute(it->second[progCnt]);
+				result = execute(code[seg][progCnt]);
 				if (result == Result::RES_ERR) {
 					Util::print("\nNSASM running error!\n");
-					Util::print("At " + it->first + ", line ");
+					Util::print("At " + seg + ", line ");
 					Util::print(progCnt + 1);
-					Util::print(": " + it->second[progCnt] + "\n\n");
+					Util::print(": " + code[seg][progCnt] + "\n\n");
 					return;
-				} else if (result == Result::RES_ETC) return;
+				} else if (result == Result::RES_ETC) {
+					return;
+				}
+
 			}
 
 			if (!backupReg.empty()) {
@@ -512,76 +527,6 @@ namespace NSASM {
 				progSeg = backupReg.top() - 1; backupReg.pop();
 			} else progCnt = 0;
 		}
-	}
-
-	void NSASM::loadFuncList() {
-#define OP [&](Register* dst, Register* src) -> Result
-
-		funcList["rem"] = OP {
-			return Result::RES_OK;
-		};
-
-		funcList["var"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_STR) src->readOnly = false;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-		funcList["int"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_INT) return Result::RES_ERR;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-		funcList["char"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_CHAR) return Result::RES_ERR;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-		funcList["float"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_FLOAT) return Result::RES_ERR;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-		funcList["str"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_STR) return Result::RES_ERR;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-		funcList["code"] = OP {
-			if (src == nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->data.s, WordType::WD_VAR)) return Result::RES_ERR;
-			if (heapManager.count(dst->data.s) != 0) return Result::RES_ERR;
-			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
-			heapManager[dst->data.s] = *src;
-			return Result::RES_OK;
-		};
-
-#undef OP
 	}
 
 }

@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="funcList.cpp" />
     <ClCompile Include="Launcher.cpp" />
     <ClCompile Include="NSASM.cpp" />
     <ClCompile Include="Util.cpp" />
@@ -26,6 +27,11 @@
   <ItemGroup>
     <ClInclude Include="NSASM.h" />
     <ClInclude Include="Util.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="test.ns">
+      <DeploymentContent>true</DeploymentContent>
+    </None>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

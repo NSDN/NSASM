@@ -3,6 +3,8 @@
 
 
 #include <functional>
+#include <sstream>
+#include <string>
 #include <vector>
 #include <stack>
 #include <map>
@@ -30,88 +32,73 @@ namespace NSASM {
 				this->type = RegType::REG_INT;
 				this->readOnly = false;
 				this->gcFlag = false;
-				this->data.c = 0;
-				this->data.i = 0;
-				this->data.f = 0;
-				this->data.s = "";
+				this->n.c = 0;
+				this->n.i = 0;
+				this->n.f = 0;
+				this->s = "";
 			}
 			Register(const Register& reg) {
-				this->gcFlag = false;
-				type = reg.type;
-				strPtr = reg.strPtr;
-				readOnly = reg.readOnly;
+				gcFlag = false;
+				type = reg.type; sp = reg.sp; readOnly = reg.readOnly;
 				switch (type) {
-				case RegType::REG_INT:
-					data.i = reg.data.i;
-					break;
-				case RegType::REG_CHAR:
-					data.c = reg.data.c;
-					break;
-				case RegType::REG_FLOAT:
-					data.f = reg.data.f;
-					break;
-				case RegType::REG_STR:
-					data.s = reg.data.s;
-					break;
-				case RegType::REG_CODE:
-					data.s = reg.data.s;
-					break;
+				case RegType::REG_INT: n.i = reg.n.i; break;
+				case RegType::REG_CHAR: n.c = reg.n.c; break;
+				case RegType::REG_FLOAT: n.f = reg.n.f; break;
+				case RegType::REG_STR: s = reg.s; break;
+				case RegType::REG_CODE: s = reg.s; break;
 				}
 			}
 			~Register() {
 				if (this->type == RegType::REG_STR || this->type == RegType::REG_CODE)
-					this->data.s.clear();
+					this->s.clear();
 			}
 
 		public:
 			Register& operator=(const Register& reg) {
-				this->gcFlag = false;
-				type = reg.type;
-				strPtr = reg.strPtr;
-				readOnly = reg.readOnly;
+				gcFlag = false;
+				type = reg.type; sp = reg.sp; readOnly = reg.readOnly;
 				switch (type) {
-				case RegType::REG_INT:
-					data.i = reg.data.i;
-					break;
-				case RegType::REG_CHAR:
-					data.c = reg.data.c;
-					break;
-				case RegType::REG_FLOAT:
-					data.f = reg.data.f;
-					break;
-				case RegType::REG_STR:
-					data.s = reg.data.s;
-					break;
-				case RegType::REG_CODE:
-					data.s = reg.data.s;
-					break;
+				case RegType::REG_INT: n.i = reg.n.i; break;
+				case RegType::REG_CHAR: n.c = reg.n.c; break;
+				case RegType::REG_FLOAT: n.f = reg.n.f; break;
+				case RegType::REG_STR: s = reg.s; break;
+				case RegType::REG_CODE: s = reg.s; break;
+				}
+				return *this;
+			}
+			Register& operator>>(string& s) {
+				stringstream parser; parser.clear();
+				switch (this->type) {
+				case RegType::REG_INT: parser << this->n.i; s = parser.str(); break;
+				case RegType::REG_CHAR: parser << this->n.c; s = parser.str(); break;
+				case RegType::REG_FLOAT: parser << this->n.f; s = parser.str(); break;
+				case RegType::REG_STR: s = this->s.substr(this->sp); break;
+				case RegType::REG_CODE: s = this->s; break;
 				}
 				return *this;
 			}
 
 		public:
 			RegType type;
-			union Data {
+			union Num {
 			public:
-				Data() { i = 0; }
-				~Data() {}
+				Num() { i = 0; }
+				~Num() {}
 			public:
-				int i; char c;
-				float f; string s;
-
-			} data;
-			int strPtr = 0;
-			bool readOnly;
-			bool gcFlag;
+				int i; char c; float f;
+			} n;
+			string s; int sp = 0;
+			bool readOnly; bool gcFlag;
 		};
 
 		typedef function<Result(Register*, Register*)> Operator;
+		#define $OP_ [&](Register* dst, Register* src) -> Result
 
 		Result execute(string var);
 		Register* run();
 		void call(string segName);
 
-		NSASM(int heapSize, int stackSize, int regCnt, map<string, string> code);
+		NSASM(int heapSize, int stackSize, int regCnt, map<string, string>& code);
 		~NSASM();
 
 	protected:
@@ -138,14 +125,15 @@ namespace NSASM {
 		int progSeg, tmpSeg;
 		int progCnt, tmpCnt;
 
+		vector<string> segs;
 		map<string, vector<string>> code;
 
 		bool verifyBound(string var, char left, char right);
 		bool verifyWord(string var, WordType type);
 		Register* getRegister(string var);
 		vector<string> convToArray(string var);
-		Result appendCode(map<string, string> code);
-		void copyRegGroup(NSASM super);
+		Result appendCode(map<string, string>& code);
+		void copyRegGroup(NSASM& super);
 
 		Result calc(int* dst, int src, char type);
 		Result calc(char* dst, char src, char type);
@@ -153,7 +141,7 @@ namespace NSASM {
 		Result calc(Register* dst, int src, char type);
 		Result calc(Register* dst, Register* src, char type);
 
-		NSASM(NSASM super, map<string, string> code);
+		NSASM(NSASM& super, map<string, string>& code);
 
 	};
 

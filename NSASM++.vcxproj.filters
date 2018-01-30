@@ -16,6 +16,9 @@
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Launcher.cpp" />
+    <ClCompile Include="funcList.cpp">
+      <Filter>NSASM</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NSASM.h">
@@ -24,5 +27,8 @@
     <ClInclude Include="Util.h">
       <Filter>Util</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="test.ns" />
   </ItemGroup>
 </Project>

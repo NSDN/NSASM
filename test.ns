@@ -1,0 +1,21 @@
+<test> {
+    mov r0, "test"
+    code c = (
+        prt r0
+        prt r0, r0
+        prt r0
+    )
+    eval r0, c
+    prt "\n"
+    out "r0 is "
+    prt r0
+    prt "\n"
+    prt c, "prt \"hello, gensokyo\""
+    eval r0, c
+    prt "\n"
+    out "r0 is "
+    prt r0
+	mov r1, " "
+	in r1
+    end
+}
