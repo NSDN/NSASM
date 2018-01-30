@@ -389,7 +389,7 @@ namespace NSASM {
 		if ((pos = var.find(' ')) != var.npos)
 			op = var.substr(0, pos);
 		else op = var;
-		transform(op.begin(), op.end(), op.begin(), tolower); // To lower case
+		transform(op.begin(), op.end(), op.begin(), ::tolower); // To lower case
 		if (op.length() + 1 < var.length()) {
 			if (
 				op == "var" || op == "int" || op == "char" ||
