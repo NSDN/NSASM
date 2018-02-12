@@ -12,6 +12,7 @@ namespace NSASM {
 		heapManager.clear();
 		stackManager.empty();
 
+		this->regCnt = regCnt;
 		this->heapSize = heapSize;
 		this->stackSize = stackSize;
 		
@@ -24,13 +25,15 @@ namespace NSASM {
 		tmpSeg = -1; tmpCnt = -1;
 
 		Register* ptr;
-		for (int i = 0; i < regCnt; i++) {
+		for (int i = 0; i < regCnt + 1; i++) {
 			ptr = new Register();
 			ptr->type = RegType::REG_INT;
 			ptr->readOnly = false;
 			ptr->n.i = 0;
 			regGroup.push_back(*ptr);
 		}
+
+		useReg = &regGroup[regCnt];
 
 		funcList.clear();
 		loadFuncList();
@@ -43,7 +46,7 @@ namespace NSASM {
 			code.clear();
 		}
 	}
-	NSASM::NSASM(NSASM& super, map<string, string>& code) : NSASM::NSASM(super.heapSize, super.stackSize, super.regGroup.size(), code) {
+	NSASM::NSASM(NSASM& super, map<string, string>& code) : NSASM::NSASM(super.heapSize, super.stackSize, super.regCnt, code) {
 		copyRegGroup(super);
 	}
 	NSASM::~NSASM() {
@@ -96,11 +99,16 @@ namespace NSASM {
 			return verifyBound(var, '<', '>');
 		case WordType::WD_CODE:
 			return verifyBound(var, '(', ')');
+		case WordType::WD_MAP:
+			if (var[0] == 'm' || var[0] == 'M') {
+				return verifyBound(var.substr(1), '(', ')');
+			} else return false;
 		case WordType::WD_VAR:
 			return !verifyWord(var, WordType::WD_REG) && !verifyWord(var, WordType::WD_CHAR) &&
 				!verifyWord(var, WordType::WD_STR) && !verifyWord(var, WordType::WD_INT) &&
 				!verifyWord(var, WordType::WD_FLOAT) && !verifyWord(var, WordType::WD_TAG) &&
-				!verifyWord(var, WordType::WD_SEG) && !verifyWord(var, WordType::WD_CODE);
+				!verifyWord(var, WordType::WD_SEG) && !verifyWord(var, WordType::WD_CODE) &&
+				!verifyWord(var, WordType::WD_MAP);
 		}
 		return false;
 	}
@@ -215,6 +223,24 @@ namespace NSASM {
 				reg->gcFlag = true;
 				Util::decodeLambda(code);
 				reg->s = code;
+			} else if (verifyWord(var, WordType::WD_MAP)) {
+				string code = var.substr(2, var.length() - 2);
+
+				reg = new Register();
+				reg->type = RegType::REG_MAP;
+				reg->readOnly = true;
+				reg->gcFlag = true;
+				reg->m.clear();
+				Util::decodeLambda(code);
+				funcList["mov"](&regGroup[regCnt], reg);
+				delete reg;
+
+				stringstream ss;
+				ss << endl << "ret r" << regCnt + 1 << endl;
+				Register c; c.type = RegType::REG_CODE;
+				c.readOnly = true; c.gcFlag = true;
+				c.s = code + ss.str();
+				reg = eval(&c);
 			} else return nullptr;
 
 			return reg;

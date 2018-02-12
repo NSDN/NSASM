@@ -76,6 +76,17 @@ namespace NSASM {
 			return Result::RES_OK;
 		};
 
+		funcList["map"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
+			if (src->type != RegType::REG_MAP) return Result::RES_ERR;
+			heapManager[dst->s] = *src;
+			heapManager[dst->s].readOnly = false;
+			return Result::RES_OK;
+		};
+
 		funcList["mov"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
@@ -636,6 +647,153 @@ namespace NSASM {
 			if (reg != nullptr) if (reg->gcFlag) delete reg;
 
 			return Result::RES_OK;
+		};
+
+		funcList["use"] = $OP_{
+			if (src != nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			if (dst->gcFlag) return Result::RES_ERR;
+			if (dst->type != RegType::REG_MAP) return Result::RES_ERR;
+			useReg = dst;
+			return Result::RES_OK;
+		};
+
+		funcList["put"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (useReg == nullptr) return Result::RES_ERR;
+			if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
+			if (dst->type == RegType::REG_CODE) {
+				Register* reg = eval(dst);
+				useReg->m[*reg] = *src;
+				if (reg != nullptr) if (reg->gcFlag) delete reg;
+			} else useReg->m[*dst] = *src;
+
+			return Result::RES_OK;
+		};
+
+		funcList["get"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			if (useReg == nullptr) return Result::RES_ERR;
+			if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
+			if (useReg->m.count(*src) == 0) return Result::RES_ERR;
+			if (src->type == RegType::REG_CODE) {
+				Register* reg = eval(src);
+				Result res = funcList["mov"](dst, &useReg->m[*reg]);
+				if (reg != nullptr) if (reg->gcFlag) delete reg;
+				return res;
+			} else 
+				return funcList["mov"](dst, &useReg->m[*src]);
+		};
+
+		funcList["cat"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			switch (dst->type) {
+			case RegType::REG_STR:
+				if (src->type != RegType::REG_STR)
+					return Result::RES_ERR;
+				dst->s += src->s;
+				break;
+			case RegType::REG_MAP:
+				if (src->type != RegType::REG_MAP)
+					return Result::RES_ERR;
+				// MAP
+				break;
+			default:
+				return Result::RES_ERR;
+			}
+			return Result::RES_OK;
+		};
+
+		funcList["dog"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			switch (dst->type) {
+			case RegType::REG_STR:
+				if (src->type != RegType::REG_STR)
+					return Result::RES_ERR;
+				Util::replace(dst->s, src->s, "");
+				break;
+			case RegType::REG_MAP:
+				if (src->type != RegType::REG_MAP)
+					return Result::RES_ERR;
+				// MAP
+				break;
+			default:
+				return Result::RES_ERR;
+			}
+			return Result::RES_OK;
+		};
+
+		funcList["type"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			
+			Register reg;
+			reg.type = RegType::REG_STR;
+			reg.readOnly = true; reg.gcFlag = true;
+			switch (src->type) {
+			case RegType::REG_INT: reg.s = "int"; break;
+			case RegType::REG_CHAR: reg.s = "char"; break;
+			case RegType::REG_FLOAT: reg.s = "float"; break;
+			case RegType::REG_STR: reg.s = "str"; break;
+			case RegType::REG_CODE: reg.s = "code"; break;
+			case RegType::REG_MAP: reg.s = "map"; break;
+			}
+			return funcList["mov"](dst, &reg);
+		};
+
+		funcList["len"] = $OP_{
+			if (dst == nullptr) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			Register reg;
+			reg.type = RegType::REG_INT;
+			reg.readOnly = true; reg.gcFlag = true;
+			if (src == nullptr) {
+				if (useReg == nullptr) return Result::RES_ERR;
+				if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
+				reg.n.i = useReg->m.size();
+			} else {
+				if (src->type != RegType::REG_STR) return Result::RES_ERR;
+				reg.n.i = src->s.length();
+			}
+			return funcList["mov"](dst, &reg);
+		};
+
+		funcList["ctn"] = $OP_{
+			if (dst == nullptr) return Result::RES_ERR;
+			Register reg;
+			reg.type = RegType::REG_INT;
+			reg.readOnly = true; reg.gcFlag = true;
+			if (src == nullptr) {
+				if (useReg == nullptr) return Result::RES_ERR;
+				if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
+				reg.n.i = useReg->m.count(*dst);
+			} else {
+				if (src->type != RegType::REG_STR) return Result::RES_ERR;
+				if (dst->type != RegType::REG_STR) return Result::RES_ERR;
+				reg.n.i = dst->s.find(src->s) != dst->s.npos ? 1 : 0;
+			}
+			return funcList["mov"](&stateReg, &reg);
+		};
+
+		funcList["equ"] = $OP_{
+			if (src == nullptr) return Result::RES_ERR;
+			if (dst == nullptr) return Result::RES_ERR;
+			if (src->type != RegType::REG_STR) return Result::RES_ERR;
+			if (dst->type != RegType::REG_STR) return Result::RES_ERR;
+			Register reg;
+			reg.type = RegType::REG_INT;
+			reg.readOnly = true; reg.gcFlag = true;
+			reg.n.i = dst->s == src->s ? 0 : 1;
+			return funcList["mov"](&stateReg, &reg);
 		};
 		
 	}
