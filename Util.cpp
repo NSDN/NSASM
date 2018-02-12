@@ -208,10 +208,7 @@ namespace NSASM {
 			}
 		}
 
-		hash<string> strHash;
-		stringstream s;
-		s << hex << strHash(var);
-		segs["_pub_" + s.str()] = pub;
+		segs["_pub_" + strHash(var)] = pub;
 
 		return segs;
 	}
