@@ -78,14 +78,48 @@ namespace NSASM {
 				case RegType::REG_STR: s = this->s.substr(this->sp); break;
 				case RegType::REG_CODE: s = this->s; break;
 				case RegType::REG_MAP:
-					string t = ""; s = "M(\n";
+					string a = "", b = ""; s = "M(\n"; Register reg;
 					for (auto it = this->m.begin(); it != this->m.end(); it++) {
-						it->second >> t; s += ("\t" + t + "\n");
+						reg = it->first; reg >> a; it->second >> b;
+						s += (a + "->" + b + "\n");
 					}
-					s += ")\n";
+					s += ")";
 					break;
 				}
 				return *this;
+			}
+			friend bool operator<(const Register& left, const Register& right) {
+				switch (left.type) {
+				case RegType::REG_INT:
+					switch (right.type) {
+					case RegType::REG_INT: return left.n.i < right.n.i;
+					default: return false;
+					}
+				case RegType::REG_CHAR:
+					switch (right.type) {
+					case RegType::REG_CHAR: return left.n.c < right.n.c;
+					default: return false;
+					}
+				case RegType::REG_FLOAT:
+					switch (right.type) {
+					case RegType::REG_FLOAT: return left.n.f < right.n.f;
+					default: return false;
+					}
+				case RegType::REG_STR:
+					switch (right.type) {
+					case RegType::REG_STR: return left.s != right.s;
+					default: return false;
+					}
+				case RegType::REG_CODE:
+					switch (right.type) {
+					case RegType::REG_CODE: return left.s != right.s;
+					default: return false;
+					}
+				case RegType::REG_MAP:
+					return false;
+				default:
+					return false;
+				}
 			}
 
 		public:

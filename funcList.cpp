@@ -666,6 +666,7 @@ namespace NSASM {
 			if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
 			if (dst->type == RegType::REG_CODE) {
 				Register* reg = eval(dst);
+				if (reg == nullptr) return Result::RES_ERR;
 				useReg->m[*reg] = *src;
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 			} else useReg->m[*dst] = *src;
@@ -679,14 +680,18 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (useReg == nullptr) return Result::RES_ERR;
 			if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
-			if (useReg->m.count(*src) == 0) return Result::RES_ERR;
+
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
+				if (useReg->m.count(*reg) == 0) return Result::RES_ERR;
 				Result res = funcList["mov"](dst, &useReg->m[*reg]);
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
-			} else 
+			} else {
+				if (useReg->m.count(*src) == 0) return Result::RES_ERR;
 				return funcList["mov"](dst, &useReg->m[*src]);
+			}
 		};
 
 		funcList["cat"] = $OP_{
@@ -702,7 +707,8 @@ namespace NSASM {
 			case RegType::REG_MAP:
 				if (src->type != RegType::REG_MAP)
 					return Result::RES_ERR;
-				// MAP
+				for (auto it = src->m.begin(); it != src->m.end(); it++)
+					dst->m[it->first] = it->second;
 				break;
 			default:
 				return Result::RES_ERR;
@@ -723,7 +729,9 @@ namespace NSASM {
 			case RegType::REG_MAP:
 				if (src->type != RegType::REG_MAP)
 					return Result::RES_ERR;
-				// MAP
+				for (auto it = src->m.begin(); it != src->m.end(); it++)
+					if (dst->m.count(it->first) != 0)
+						dst->m.erase(it->first);
 				break;
 			default:
 				return Result::RES_ERR;

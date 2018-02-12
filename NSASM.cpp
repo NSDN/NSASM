@@ -224,7 +224,7 @@ namespace NSASM {
 				Util::decodeLambda(code);
 				reg->s = code;
 			} else if (verifyWord(var, WordType::WD_MAP)) {
-				string code = var.substr(2, var.length() - 2);
+				string code = var.substr(2, var.length() - 3);
 
 				reg = new Register();
 				reg->type = RegType::REG_MAP;
@@ -236,7 +236,7 @@ namespace NSASM {
 				delete reg;
 
 				stringstream ss;
-				ss << endl << "ret r" << regCnt + 1 << endl;
+				ss << endl << "ret r" << regCnt << endl;
 				Register c; c.type = RegType::REG_CODE;
 				c.readOnly = true; c.gcFlag = true;
 				c.s = code + ss.str();

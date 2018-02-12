@@ -57,6 +57,20 @@ namespace NSASM {
 			}
 		}
 
+		template<typename T>
+		static inline string strHash(T var) {
+			hash<T> h;
+			stringstream s;
+			s << hex << h(var);
+			return s.str();
+		}
+
+		template<typename T>
+		static inline size_t intHash(T var) {
+			hash<T> h;
+			return h(var);
+		}
+
 	public:
 		static void print(int value);
 		static void print(char value);
