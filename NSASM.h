@@ -76,7 +76,7 @@ namespace NSASM {
 				case RegType::REG_CHAR: parser << this->n.c; s = parser.str(); break;
 				case RegType::REG_FLOAT: parser << this->n.f; s = parser.str(); break;
 				case RegType::REG_STR: s = this->s.substr(this->sp); break;
-				case RegType::REG_CODE: s = this->s; break;
+				case RegType::REG_CODE: s = "(\n" + this->s + "\n)"; break;
 				case RegType::REG_MAP:
 					string a = "", b = ""; s = "M(\n"; Register reg;
 					for (auto it = this->m.begin(); it != this->m.end(); it++) {
