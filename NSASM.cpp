@@ -419,7 +419,8 @@ namespace NSASM {
 		if (op.length() + 1 < var.length()) {
 			if (
 				op == "var" || op == "int" || op == "char" ||
-				op == "float" || op == "str" || op == "code"
+				op == "float" || op == "str" || op == "code" ||
+				op == "map"
 			) {
 				// Variable define
 				dst = var.substr(op.length() + 1);
