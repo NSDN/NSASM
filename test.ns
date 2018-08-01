@@ -1,23 +1,22 @@
 run <main>
 
-  <main>
-    {
+<main> {
     map m1 = M(
-    mov r0, 20
-    mov r1, 0
+        mov r0, 20
+        mov r1, 0
     [head]
-    inc r1
-    mov r2, r1
-    mul r2, r1
-    put r1, r2
-    cmp r1, r0
-    jnz [head]
+        inc r1
+        mov r2, r1
+        mul r2, r1
+        put r1, r2
+        cmp r1, r0
+        jnz [head]
     )
 
     use m1
     mov r0, 20
     mov r1, 0
-    [work]
+[work]
     inc r1
     get r2, r1
     mul r2, r2
@@ -26,12 +25,11 @@ run <main>
     nop
 
     code c = (
-    run <test1>
-      <test1>
-        {
-        run <test2>
-          }
-          <test2> {
+        run <test1>
+        <test1> {
+            run <test2>
+        }
+        <test2> {
             ret "done"
         }
     )
