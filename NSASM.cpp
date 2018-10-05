@@ -301,6 +301,7 @@ namespace NSASM {
 		case '-': *dst -= src; break;
 		case '*': *dst *= src; break;
 		case '/': *dst /= src; break;
+		case '%': *dst %= src; break;
 		case '&': *dst &= src; break;
 		case '|': *dst |= src; break;
 		case '~': *dst = ~(*dst); break;
@@ -317,6 +318,7 @@ namespace NSASM {
 		case '-': *dst -= src; break;
 		case '*': *dst *= src; break;
 		case '/': *dst /= src; break;
+		case '%': *dst %= src; break;
 		case '&': *dst &= src; break;
 		case '|': *dst |= src; break;
 		case '~': *dst = ~(*dst); break;
@@ -399,13 +401,18 @@ namespace NSASM {
 		return Result::RES_OK;
 	}
 
+	NSASM* NSASM::instance(NSASM& super, map<string, string>& code) {
+		return new NSASM(super, code);
+	}
+
 	NSASM::Register* NSASM::eval(Register* reg) {
 		if (reg == nullptr) return nullptr;
 		if (reg->type != RegType::REG_CODE) return nullptr;
 		map<string, string> code = Util::getSegments(reg->s);
-		NSASM nsasm(*this, code);
-		Register* result = new Register(*nsasm.run());
+		NSASM* nsasm = instance(*this, code);
+		Register* result = new Register(*nsasm->run());
 		result->gcFlag = true;
+		delete nsasm;
 		return result;
 	}
 
