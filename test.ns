@@ -1,5 +1,25 @@
 run <main>
 
+.printInfo<a, b, c, d> {
+	prt "Test Output:"
+
+	out '\t'
+	out "a is: "
+	prt a
+
+	out '\t'
+	out "b is: "
+	prt b
+
+	out '\t'
+	out "c is: "
+	prt c
+
+	out '\t'
+	out "d is: "
+	prt d
+}
+
 <main> {
     map m1 = M(
         mov r0, 20
@@ -37,5 +57,9 @@ run <main>
     eval r0, c
     out "result is "
     prt r0
+
+	prt "Marco Expandation Test"
+	printInfo<0x32, 123.0F, 'A', "Gensokyo">
+
     end
 }
