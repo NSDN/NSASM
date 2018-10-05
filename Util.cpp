@@ -4,6 +4,33 @@
 
 namespace NSASM {
 
+	DefBlock DefBlock::getBlock(string head, string body) {
+		if (head.find("<") == head.npos || head[head.length() - 1] != '>')
+			return nulblk();
+
+		DefBlock ret; size_t pos;
+		pos = head.find("<");
+		ret.name = head.substr(1, pos - 1);
+		string arg = head.substr(pos + 1, head.find(">", pos) - pos - 1);
+		ret.args = Util::parseArgs(arg, ',');
+		ret.block = body;
+
+		if (ret.block.find(ret.name) != ret.block.npos) // Self-call not allowed
+			return nulblk();
+
+		return ret;
+	}
+
+	DefCall DefCall::getCall(string str) {
+		DefCall ret; size_t pos;
+		pos = str.find("<");
+		ret.name = str.substr(0, pos);
+		string arg = str.substr(pos + 1, str.find(">", pos) - pos - 1);
+		ret.args = Util::parseArgs(arg, ',');
+
+		return ret;
+	}
+
 	void Util::print(int value) {
 		stringstream parser;
 		parser << value;
@@ -38,6 +65,16 @@ namespace NSASM {
 		cycleReplace(var, symbol + trashB, symbol);
 		cycleReplace(var, trashA + symbol, symbol);
 		cycleReplace(var, trashB + symbol, symbol);
+	}
+
+	void Util::cleanSymbolLeft(string& var, string symbol, string trashA, string trashB) {
+		cycleReplace(var, trashA + symbol, symbol);
+		cycleReplace(var, trashB + symbol, symbol);
+	}
+
+	void Util::cleanSymbolRight(string& var, string symbol, string trashA, string trashB) {
+		cycleReplace(var, symbol + trashA, symbol);
+		cycleReplace(var, symbol + trashB, symbol);
 	}
 
 	string Util::formatLine(string var) {
@@ -88,6 +125,12 @@ namespace NSASM {
 		}
 		cycleReplace(buf, "\n\n", "\n");
 		reader.clear();
+
+		cleanSymbolRight(buf, "<", "\t", " ");
+		cleanSymbolLeft(buf, ">", "\t", " ");
+		cleanSymbolRight(buf, "[", "\t", " ");
+		cleanSymbolLeft(buf, "]", "\t", " ");
+
 		return buf;
 	}
 
@@ -163,12 +206,22 @@ namespace NSASM {
 		map<string, string> segs;
 		string pub = "", buf = var;
 
-		buf = formatCode(buf);
-		repairBrackets(buf, "{", "}");
-		repairBrackets(buf, "(", ")");
-		buf = formatCode(buf);
+		vector<DefBlock> blocks = getDefBlocks(buf);
+		if (!blocks.empty())
+			buf = doPreProcess(blocks, buf);
 
-		buf = formatLambda(buf);
+		if (blocks.empty() || buf == nulstr) {
+			buf = var;
+
+			buf = formatCode(buf);
+			repairBrackets(buf, "{", "}");
+			repairBrackets(buf, "(", ")");
+			buf = formatCode(buf);
+
+			buf = formatLambda(buf);
+		}
+
+		// Here we got formated code
 
 		stringstream reader(buf);
 		string head = "", body = "", tmp;
@@ -227,6 +280,151 @@ namespace NSASM {
 		}
 
 		return seg;
+	}
+
+	vector<string> Util::parseArgs(string str, char split) {
+		vector<string> args;
+
+		const int IDLE = 0, RUN = 1;
+		int state = IDLE;
+		string buf = "";
+		char old, now = '\0';
+		for (int i = 0; i < str.length(); i++) {
+			old = now;
+			now = str[i];
+			switch (state) {
+			case IDLE:
+				if (now == split) {
+					args.push_back(buf);
+					buf = "";
+					continue;
+				}
+				if (now == ' ' || now == '\t')
+					continue;
+				buf += now;
+				if (now == '\'' || now == '\"')
+					state = RUN;
+				break;
+			case RUN:
+				buf += now;
+				if (now == '\'' || now == '\"')
+					if (old != '\\')
+						state = IDLE;
+				break;
+			default:
+				break;
+			}
+		}
+
+		if (state == IDLE && buf.length() != 0)
+			args.push_back(buf);
+
+		return args;
+	}
+
+	vector<DefBlock> Util::getDefBlocks(string var) {
+		vector<DefBlock> blocks;
+		string buf = var;
+
+		buf = formatCode(buf);
+		repairBrackets(buf, "{", "}");
+		repairBrackets(buf, "(", ")");
+		buf = formatCode(buf);
+
+		buf = formatLambda(buf);
+
+		stringstream reader(buf); DefBlock blk;
+		string head = "", body = "", tmp;
+		const int IDLE = 0, RUN = 1;
+		int state = IDLE, count = 0;
+		while (!reader.eof()) {
+			switch (state) {
+			case IDLE:
+				getline(reader, head);
+				count = 0; body = "";
+				if (head.find("{") != head.npos) {
+					replace(head, "{", "");
+					count += 1;
+					state = RUN;
+				}
+				break;
+			case RUN:
+				if (!reader.eof()) {
+					getline(reader, tmp);
+					if (tmp.find("{") != tmp.npos)
+						count += 1;
+					else if (tmp.find("}") != tmp.npos)
+						count -= 1;
+					if (tmp.find("(") != tmp.npos && tmp.find(")") != tmp.npos) {
+						if (tmp.find("{") != tmp.npos && tmp.find("}") != tmp.npos)
+							count -= 1;
+					}
+					if (count == 0) {
+						if (head[0] == '.' && head[1] != '<') {
+							blk = DefBlock::getBlock(head, body);
+							if (blk == DefBlock::nulblk()) {
+								print("Error at: \"" + head + "\"\n\n");
+								blocks.clear();
+								return blocks;
+							}
+							blocks.push_back(blk);
+						}
+						state = IDLE;
+					}
+					body += (tmp + "\n");
+				}
+				break;
+			default:
+				break;
+			}
+		}
+
+		return blocks;
+	}
+
+	string Util::doPreProcess(vector<DefBlock> blocks, string var) {
+		string buf = var;
+
+		buf = formatCode(buf);
+		repairBrackets(buf, "{", "}");
+		repairBrackets(buf, "(", ")");
+		buf = formatCode(buf);
+
+		buf = formatLambda(buf);
+
+		stringstream reader(buf);
+		string tmp = "", line, block;
+		DefCall call; bool defRes; size_t pos;
+		while (!reader.eof()) {
+			getline(reader, line);
+			if ((pos = line.find("<")) != line.npos && line[0] != '<' && line[line.length() - 1] == '>' && line.substr(0, pos).find(" ") == string::npos) {
+				call = DefCall::getCall(line); defRes = false;
+				for (DefBlock blk : blocks) {
+					if (blk.name == call.name)
+						if (blk.args.size() == call.args.size()) {
+							block = blk.block;
+							for (int i = 0; i < call.args.size(); i++) {
+								replace(block, blk.args[i] + ",", call.args[i] + ",");
+								replace(block, blk.args[i] + "\n", call.args[i] + "\n");
+							}
+							tmp += (block + "\n");
+							defRes = true;
+							break;
+						}
+				}
+				if (!defRes) {
+					print("Error at: \"" + line + "\"\n\n");
+					return nulstr;
+				}
+			} else {
+				tmp += (line + "\n");
+			}
+		}
+
+		buf = tmp;
+		buf = formatCode(buf);
+
+		return buf;
 	}
 
 	string Util::read(string path) {
