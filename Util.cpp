@@ -15,9 +15,6 @@ namespace NSASM {
 		ret.args = Util::parseArgs(arg, ',');
 		ret.block = body;
 
-		if (ret.block.find(ret.name) != ret.block.npos) // Self-call not allowed
-			return nulblk();
-
 		return ret;
 	}
 
