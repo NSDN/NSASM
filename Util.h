@@ -79,15 +79,21 @@ namespace NSASM {
 		typedef function<void(string)> Printer;
 		typedef function<string(void)> Scanner;
 		typedef function<string(string)> FileReader;
+		typedef function<vector<unsigned char>(string)> BinReader;
+		typedef function<void(string, vector<unsigned char>)> BinWriter;
 
 		Printer Output;
 		Scanner Input;
 		FileReader FileInput;
+		BinReader BinaryInput;
+		BinWriter BinaryOutput;
 
 		Util() {
 			Output = [](string str) -> void { cout << str; };
 			Input = [](void) -> string { string s = ""; getline(cin, s); return s; };
 			FileInput = [](string path) -> string { return ""; };
+			BinaryInput = [](string path) ->vector<unsigned char> { vector<unsigned char> res; return res; };
+			BinaryOutput = [](string path, vector<unsigned char> data) -> void {};
 		}
 
 	public:
@@ -140,6 +146,7 @@ namespace NSASM {
 		static void decodeLambda(string& var);
 		static void formatString(string& var);
 		static string formatLambda(string var);
+		static string preProcessCode(string var);
 		static map<string, string> getSegments(string var);
 		static string getSegment(string var, string head);
 		static vector<string> parseArgs(string str, char split);
@@ -149,6 +156,14 @@ namespace NSASM {
 		static void run(string path);
 		static void execute(string str);
 		static void interactive();
+		static string compile(string inPath, string outPath);
+		static void binary(string path);
+		
+	private:
+		static void putToList(vector<unsigned char>& list, unsigned short value);
+		static void putToList(vector<unsigned char>& list, string value);
+		static unsigned short getUint16(vector<unsigned char> data, int offset);
+		static string getStr2(vector<unsigned char> data, int offset);
 
 	};
 
