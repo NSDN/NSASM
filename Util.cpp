@@ -15,9 +15,6 @@ namespace NSASM {
 		ret.args = Util::parseArgs(arg, ',');
 		ret.block = body;
 
-		if (ret.block.find(ret.name) != ret.block.npos) // Self-call not allowed
-			return nulblk();
-
 		return ret;
 	}
 
@@ -202,9 +199,8 @@ namespace NSASM {
 		return var;
 	}
 
-	map<string, string> Util::getSegments(string var) {
-		map<string, string> segs;
-		string pub = "", buf = var;
+	string Util::preProcessCode(string var) {
+		string buf = var;
 
 		vector<DefBlock> blocks = getDefBlocks(buf);
 		if (!blocks.empty())
@@ -220,6 +216,15 @@ namespace NSASM {
 
 			buf = formatLambda(buf);
 		}
+
+		return buf;
+	}
+
+	map<string, string> Util::getSegments(string var) {
+		map<string, string> segs;
+		string pub = "";
+
+		string buf = preProcessCode(var);
 
 		// Here we got formated code
 
@@ -453,6 +458,11 @@ namespace NSASM {
 	}
 
 	void Util::run(string path) {
+		if (path.find(".nsb") == path.length() - 4) {
+			binary(path);
+			return;
+		}
+
 		string str = read(path);
 		if (str == nulstr) return;
 
@@ -566,6 +576,163 @@ namespace NSASM {
 
 			lines += 1;
 		}
+	}
+
+	void Util::putToList(vector<unsigned char>& list, unsigned short value) {
+		list.push_back((unsigned char)value);
+		list.push_back((unsigned char)(value >> 8));
+	}
+
+	void Util::putToList(vector<unsigned char>& list, string value) {
+		for (int i = 0; i < value.length(); i++)
+			list.push_back((unsigned char)value[i]);
+	}
+
+	string Util::compile(string inPath, string outPath) {
+		string str = read(inPath);
+		if (str == nulstr) return nulstr;
+
+		if (outPath == nulstr) return preProcessCode(str);
+
+		unsigned short heap = 64, stack = 32, regs = 16;
+
+		string conf = getSegment(str, ".<conf>");
+		if (conf == nulstr) {
+			print("Conf load error.\n");
+			print("At file: " + inPath + "\n\n");
+			return nulstr;
+		}
+		if (conf.size() > 0) {
+			stringstream reader(conf), parser;
+			string head, buf; size_t pos;
+			try {
+				while (!reader.eof()) {
+					getline(reader, buf);
+					if ((pos = buf.find(' ')) != buf.npos) {
+						head = buf.substr(0, pos);
+						parser.clear();
+						parser << buf.substr(pos + 1);
+						if (head == "heap") parser >> heap;
+						else if (head == "stack") parser >> stack;
+						else if (head == "reg") parser >> regs;
+					}
+				}
+			}
+			catch (exception e) {
+				print("Conf load error.\n");
+				print("At file: " + inPath + "\n\n");
+				return nulstr;
+			}
+		}
+
+		map<string, string> code = getSegments(str);
+		unsigned short segCnt = code.size();
+
+		vector<unsigned char> bytes;
+		putToList(bytes, "NS");
+		putToList(bytes, 0xFFFF);
+		putToList(bytes, heap);
+		putToList(bytes, stack);
+		putToList(bytes, regs);
+		putToList(bytes, segCnt);
+
+		for (auto seg : code) {
+			putToList(bytes, 0xA5A5);
+			putToList(bytes, seg.first);
+			putToList(bytes, 0xAAAA);
+			putToList(bytes, seg.second);
+		}
+
+		putToList(bytes, 0xFFFF);
+		unsigned short sum = 0;
+		for (int i = 0; i < bytes.size(); i++)
+			sum += bytes[i];
+		putToList(bytes, sum);
+
+		try {
+			I().BinaryOutput(outPath, bytes);
+		} catch (exception e) {
+			print("File write failed.\n");
+			print("At file: " + outPath + "\n\n");
+			return nulstr;
+		}
+
+		return preProcessCode(str);
+	}
+
+	unsigned short Util::getUint16(vector<unsigned char> data, int offset) {
+		unsigned short res = 0;
+		if (data.size() >= offset + 1)
+			res = (data[offset] | (data[offset + 1] << 8));
+		return res;
+	}
+
+	string Util::getStr2(vector<unsigned char> data, int offset) {
+		string res = "";
+		if (data.size() >= offset + 1) {
+			res += (char)data[offset];
+			res += (char)data[offset + 1];
+		}
+		return res;
+	}
+
+	void Util::binary(string path) {
+		vector<unsigned char> data = I().BinaryInput(path);
+		if (data.size() < 16) return;
+
+		if (getStr2(data, 0) != "NS") return;
+		if (getUint16(data, 2) != 0xFFFF) return;
+
+		unsigned short sum = 0;
+		for (int i = 0; i < data.size() - 2; i++)
+			sum += data[i];
+		if (sum != getUint16(data, data.size() - 2))
+			return;
+
+		unsigned short heap, stack, regs, segCnt;
+		heap = getUint16(data, 4);
+		stack = getUint16(data, 6);
+		regs = getUint16(data, 8);
+		segCnt = getUint16(data, 10);
+
+		int offset = 12, segPos = -1;
+		map<string, string> code;
+		
+		vector<string> segName, segCode;
+		segName.resize(segCnt); segCode.resize(segCnt);
+
+		const int SEG_NAME = 0, SEG_CODE = 1;
+		int state = SEG_NAME, offmax = data.size() - 1;
+		while (offset <= offmax - 4) {
+			if (getUint16(data, offset) == 0xA5A5) {
+				if (segPos >= segCnt - 1)
+					return;
+				segPos += 1; offset += 2;
+				state = SEG_NAME;
+				segName[segPos] = "";
+			}
+			else if (getUint16(data, offset) == 0xAAAA) {
+				offset += 2;
+				state = SEG_CODE;
+				segCode[segPos] = "";
+			}
+			else {
+				if (state == SEG_NAME)
+					segName[segPos] += (char)data[offset];
+				else if (state == SEG_CODE)
+					segCode[segPos] += (char)data[offset];
+				offset += 1;
+			}
+		}
+
+		if (getUint16(data, offset) != 0xFFFF) return;
+
+		for (int i = 0; i < segCnt; i++)
+			code[segName[i]] = segCode[i];
+
+		NSASM nsasm(heap, stack, regs, code);
+		nsasm.run();
+		print("\nNSASM running finished.\n\n");
 	}
 
 }
