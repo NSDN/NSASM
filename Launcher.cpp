@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 	NSASM::Util::print("\n\n");
 
 	if (argc <= 1) {
-		NSASM::Util::print("Usage: nsasm [c/r] [FILE]\n\n");
+		NSASM::Util::print("Usage: nsasm [c/r/i] [FILE]\n\n");
 		NSASM::Util::interactive();
 	} else {
 		if (argc == 4) {
