@@ -266,12 +266,18 @@ namespace NSASM {
 					if (src->type == RegType::REG_CHAR && src->n.c == '\b') {
 						if (dst->s.find('\n') != dst->s.npos) {
 							string buf = "", res = "";
-							ss << dst->s;
+							ss << dst->s; int count = 0;
 							while (!ss.eof()) {
 								getline(ss, buf);
-								if (ss.eof()) break;
-								res += buf;
+								count += 1;
 							}
+							ss.clear(); ss << dst->s;
+							for (int i = 0; i < count - 1; i++) {
+								getline(ss, buf);
+								res += buf;
+								if (i < count - 2) res += "\n";
+							}
+							dst->s = res;
 						}
 					} else if (src->type == RegType::REG_CODE) {
 						Register* reg = eval(src);
@@ -279,24 +285,30 @@ namespace NSASM {
 						*reg >> s; if (reg->gcFlag) delete reg;
 						dst->s += ("\n" + s);
 					} else if (src->type == RegType::REG_STR) {
-						dst->s += ("\n" + src->s);
+						dst->s += ("\n" + src->s.substr(src->sp));
 					} else return Result::RES_ERR;
 				} else if (dst->type == RegType::REG_CODE) {
 					if (dst->readOnly) return Result::RES_ERR;
 					if (src->type == RegType::REG_CHAR && src->n.c == '\b') {
 						if (dst->s.find('\n') != dst->s.npos) {
 							string buf = "", res = "";
-							ss << dst->s;
+							ss << dst->s; int count = 0;
 							while (!ss.eof()) {
 								getline(ss, buf);
-								if (ss.eof()) break;
-								res += buf;
+								count += 1;
 							}
+							ss.clear(); ss << dst->s;
+							for (int i = 0; i < count - 1; i++) {
+								getline(ss, buf);
+								res += buf;
+								if (i < count - 2) res += "\n";
+							}
+							dst->s = res;
 						}
 					} else if (src->type == RegType::REG_CODE) {
 						dst->s += ("\n" + src->s);
 					} else if (src->type == RegType::REG_STR) {
-						dst->s += ("\n" + src->s);
+						dst->s += ("\n" + src->s.substr(src->sp));
 					} else return Result::RES_ERR;
 				} else return Result::RES_ERR;
 			} else {
@@ -653,6 +665,7 @@ namespace NSASM {
 			Register* reg;
 			if (src == nullptr) reg = eval(dst);
 			else {
+				if (dst->readOnly) return Result::RES_ERR;
 				reg = eval(src);
 				*dst = *reg;
 			}

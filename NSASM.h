@@ -16,7 +16,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.51"; }
+		static string ver() { return "0.52"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
