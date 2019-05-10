@@ -7,6 +7,12 @@ using namespace std;
 #include <string.h>
 #include <time.h>
 
+#define CODE_HEADER "HELLO GENSOKYO!"
+#define CODE_HEADER_LEN 16
+#define CODE_MAX_SIZE 4096
+
+const static unsigned char inlineCode[CODE_MAX_SIZE] = CODE_HEADER;
+
 int main(int argc, char* argv[]) {
 	NSASM::Util::I().FileInput = [](string path) -> string {
 		ifstream reader; stringstream str; string buf;
@@ -37,6 +43,13 @@ int main(int argc, char* argv[]) {
 		writer.flush();
 		writer.close();
 	};
+
+	char cdHeader[CODE_HEADER_LEN] = { 0 };
+	memcpy(cdHeader, inlineCode, CODE_HEADER_LEN);
+	if (strcmp(cdHeader, CODE_HEADER) != 0) {
+		NSASM::Util::binary((unsigned char*)inlineCode, CODE_MAX_SIZE);
+		return 0;
+	}
 
 	NSASM::Util::print("NyaSama Assembly Script Module\n");
 	NSASM::Util::print("Version: ");

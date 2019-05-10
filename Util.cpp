@@ -588,6 +588,32 @@ namespace NSASM {
 			list.push_back((unsigned char)value[i]);
 	}
 
+	void Util::putBytes(vector<unsigned char>& bytes, unsigned short size,
+		map<string, string>& code,
+		unsigned short heap, unsigned short stack, unsigned short regs,
+		unsigned short segCnt
+	) {
+		putToList(bytes, "NS");
+		putToList(bytes, size);
+		putToList(bytes, heap);
+		putToList(bytes, stack);
+		putToList(bytes, regs);
+		putToList(bytes, segCnt);
+
+		for (auto seg : code) {
+			putToList(bytes, 0xA5A5);
+			putToList(bytes, seg.first);
+			putToList(bytes, 0xAAAA);
+			putToList(bytes, seg.second);
+		}
+
+		putToList(bytes, 0xFFFF);
+		unsigned short sum = 0;
+		for (int i = 0; i < bytes.size(); i++)
+			sum += bytes[i];
+		putToList(bytes, sum);
+	}
+
 	string Util::compile(string inPath, string outPath) {
 		string str = read(inPath);
 		if (str == nulstr) return nulstr;
@@ -629,25 +655,10 @@ namespace NSASM {
 		unsigned short segCnt = code.size();
 
 		vector<unsigned char> bytes;
-		putToList(bytes, "NS");
-		putToList(bytes, 0xFFFF);
-		putToList(bytes, heap);
-		putToList(bytes, stack);
-		putToList(bytes, regs);
-		putToList(bytes, segCnt);
-
-		for (auto seg : code) {
-			putToList(bytes, 0xA5A5);
-			putToList(bytes, seg.first);
-			putToList(bytes, 0xAAAA);
-			putToList(bytes, seg.second);
-		}
-
-		putToList(bytes, 0xFFFF);
-		unsigned short sum = 0;
-		for (int i = 0; i < bytes.size(); i++)
-			sum += bytes[i];
-		putToList(bytes, sum);
+		putBytes(bytes, 0xFFFF, code, heap, stack, regs, segCnt);
+		unsigned short size = bytes.size() & 0xFFFF;
+		bytes.clear();
+		putBytes(bytes, size, code, heap, stack, regs, segCnt);
 
 		try {
 			I().BinaryOutput(outPath, bytes);
@@ -681,7 +692,7 @@ namespace NSASM {
 		if (data.size() < 16) return;
 
 		if (getStr2(data, 0) != "NS") return;
-		if (getUint16(data, 2) != 0xFFFF) return;
+		if (getUint16(data, 2) != data.size()) return; // limit to 64K
 
 		unsigned short sum = 0;
 		for (int i = 0; i < data.size() - 2; i++)
@@ -710,13 +721,11 @@ namespace NSASM {
 				segPos += 1; offset += 2;
 				state = SEG_NAME;
 				segName[segPos] = "";
-			}
-			else if (getUint16(data, offset) == 0xAAAA) {
+			} else if (getUint16(data, offset) == 0xAAAA) {
 				offset += 2;
 				state = SEG_CODE;
 				segCode[segPos] = "";
-			}
-			else {
+			} else {
 				if (state == SEG_NAME)
 					segName[segPos] += (char)data[offset];
 				else if (state == SEG_CODE)
@@ -733,6 +742,73 @@ namespace NSASM {
 		NSASM nsasm(heap, stack, regs, code);
 		nsasm.run();
 		print("\nNSASM running finished.\n\n");
+	}
+
+	unsigned short Util::getUint16(unsigned char* data, int offset) {
+		unsigned short res = 0;
+		res = (data[offset] | (data[offset + 1] << 8));
+		return res;
+	}
+
+	string Util::getStr2(unsigned char* data, int offset) {
+		string res = "";
+		res += (char)data[offset];
+		res += (char)data[offset + 1];
+		return res;
+	}
+
+	void Util::binary(unsigned char* data, unsigned short max) {
+		if (getStr2(data, 0) != "NS") return;
+		unsigned short size = getUint16(data, 2);
+		if (size > max) return;
+
+		unsigned short sum = 0;
+		for (int i = 0; i < size - 2; i++)
+			sum += data[i];
+		if (sum != getUint16(data, size - 2))
+			return;
+
+		unsigned short heap, stack, regs, segCnt;
+		heap = getUint16(data, 4);
+		stack = getUint16(data, 6);
+		regs = getUint16(data, 8);
+		segCnt = getUint16(data, 10);
+
+		int offset = 12, segPos = -1;
+		map<string, string> code;
+		
+		vector<string> segName, segCode;
+		segName.resize(segCnt); segCode.resize(segCnt);
+
+		const int SEG_NAME = 0, SEG_CODE = 1;
+		int state = SEG_NAME, offmax = size - 1;
+		while (offset <= offmax - 4) {
+			if (getUint16(data, offset) == 0xA5A5) {
+				if (segPos >= segCnt - 1)
+					return;
+				segPos += 1; offset += 2;
+				state = SEG_NAME;
+				segName[segPos] = "";
+			} else if (getUint16(data, offset) == 0xAAAA) {
+				offset += 2;
+				state = SEG_CODE;
+				segCode[segPos] = "";
+			} else {
+				if (state == SEG_NAME)
+					segName[segPos] += (char)data[offset];
+				else if (state == SEG_CODE)
+					segCode[segPos] += (char)data[offset];
+				offset += 1;
+			}
+		}
+
+		if (getUint16(data, offset) != 0xFFFF) return;
+
+		for (int i = 0; i < segCnt; i++)
+			code[segName[i]] = segCode[i];
+
+		NSASM nsasm(heap, stack, regs, code);
+		nsasm.run();
 	}
 
 }

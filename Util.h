@@ -158,12 +158,21 @@ namespace NSASM {
 		static void interactive();
 		static string compile(string inPath, string outPath);
 		static void binary(string path);
+		static void binary(unsigned char* data, unsigned short max);
 		
 	private:
 		static void putToList(vector<unsigned char>& list, unsigned short value);
 		static void putToList(vector<unsigned char>& list, string value);
 		static unsigned short getUint16(vector<unsigned char> data, int offset);
 		static string getStr2(vector<unsigned char> data, int offset);
+		static unsigned short getUint16(unsigned char* data, int offset);
+		static string getStr2(unsigned char* data, int offset);
+		static void putBytes(
+			vector<unsigned char>& bytes, unsigned short size,
+			map<string, string>& code,
+			unsigned short heap, unsigned short stack, unsigned short regs,
+			unsigned short segCnt
+		);
 
 	};
 
