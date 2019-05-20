@@ -154,6 +154,8 @@ namespace NSASM {
 		replace(var, "\\\\", "\\");
 		replace(var, "\\n", "\n");
 		replace(var, "\\t", "\t");
+		replace(var, "\\\"", "\"");
+		replace(var, "\\\'", "\'");
 	}
 
 	string Util::formatLambda(string var) {
@@ -165,8 +167,7 @@ namespace NSASM {
 			switch (state) {
 			case IDLE:
 				count = begin = end = 0;
-				if (var[i] == '(')
-				{
+				if (var[i] == '(') {
 					begin = i;
 					count += 1;
 					state = RUN;
@@ -177,8 +178,7 @@ namespace NSASM {
 					count += 1;
 				else if (var[i] == ')')
 					count -= 1;
-				if (count == 0)
-				{
+				if (count == 0) {
 					end = i;
 					state = DONE;
 				}
@@ -199,15 +199,64 @@ namespace NSASM {
 		return var;
 	}
 
+	map<string, string> Util::getStrings(string var, string& out) {
+		map<string, string> strings; string key = "";
+		const int IDLE = 0, RUN = 1, DONE = 2;
+		int state = IDLE, count = 0, begin = 0, end = 0;
+		string a = "", b = "", c = "";
+
+		string str = var;
+		for (int i = 0; i < str.length(); i++) {
+			switch (state) {
+			case IDLE:
+				count = begin = end = 0;
+				if (str[i] == '\"' || str[i] == '\'') {
+					begin = i;
+					count = str[i] == '\"' ? 2 : 1;
+					state = RUN;
+				}
+				break;
+			case RUN:
+				if (str[i] == '\"' && str[i - 1] != '\\')
+					count -= 2;
+				else if (str[i] == '\'' && str[i - 1] != '\\')
+					count -= 1;
+				if (count <= 0) {
+					end = i;
+					state = DONE;
+				}
+				break;
+			case DONE:
+				a = str.substr(0, begin);
+				b = str.substr(begin, end - begin + 1);
+				c = str.substr(end + 1);
+				key = "_str_" + strHash(b) + "_";
+				strings[key] = b;
+				str = a + key + c;
+				state = IDLE;
+				break;
+			default:
+				break;
+			}
+		}
+
+		out = str;
+
+		return strings;
+	}
+
 	string Util::preProcessCode(string var) {
-		string buf = var;
+		string str = "";
+		auto strings = getStrings(var, str);
+		// Pre-process strings and chars ok
+		string buf = str;
 
 		vector<DefBlock> blocks = getDefBlocks(buf);
 		if (!blocks.empty())
 			buf = doPreProcess(blocks, buf);
 
 		if (blocks.empty() || buf == nulstr) {
-			buf = var;
+			buf = str;
 
 			buf = formatCode(buf);
 			repairBrackets(buf, "{", "}");
@@ -216,6 +265,9 @@ namespace NSASM {
 
 			buf = formatLambda(buf);
 		}
+
+		for (auto it = strings.begin(); it != strings.end(); it++)
+			replace(buf, it->first, it->second);
 
 		return buf;
 	}
@@ -227,6 +279,10 @@ namespace NSASM {
 		string buf = preProcessCode(var);
 
 		// Here we got formated code
+
+		string str = "";
+		auto strings = getStrings(buf, str);
+		buf = str;
 
 		stringstream reader(buf);
 		string head = "", body = "", tmp;
@@ -266,7 +322,11 @@ namespace NSASM {
 			}
 		}
 
-		segs["_pub_" + strHash(var)] = pub;
+		segs["_pub_" + strHash(var) + "_"] = pub;
+
+		for (auto seg = segs.begin(); seg != segs.end(); seg++)
+			for (auto it = strings.begin(); it != strings.end(); it++)
+				replace(seg->second, it->first, it->second);
 
 		return segs;
 	}

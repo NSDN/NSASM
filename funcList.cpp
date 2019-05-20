@@ -477,17 +477,17 @@ namespace NSASM {
 		funcList["cmp"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (funcList["mov"](&stateReg, dst) == Result::RES_ERR)
+			if (funcList["mov"](&stateReg, dst, nullptr) == Result::RES_ERR)
 				return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
-				if (funcList["sub"](&stateReg, reg) == Result::RES_ERR) {
+				if (funcList["sub"](&stateReg, reg, nullptr) == Result::RES_ERR) {
 					if (reg != nullptr) if (reg->gcFlag) delete reg;
 					return Result::RES_ERR;
 				}
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 			} else {
-				if (funcList["sub"](&stateReg, src) == Result::RES_ERR)
+				if (funcList["sub"](&stateReg, src, nullptr) == Result::RES_ERR)
 					return Result::RES_ERR;
 			}
 			return Result::RES_OK;
@@ -498,19 +498,19 @@ namespace NSASM {
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->type == RegType::REG_CODE) {
 				Register* reg = eval(dst);
-				if (funcList["mov"](&stateReg, reg) == Result::RES_ERR) {
+				if (funcList["mov"](&stateReg, reg, nullptr) == Result::RES_ERR) {
 					if (reg != nullptr) if (reg->gcFlag) delete reg;
 					return Result::RES_ERR;
 				}
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 			} else {
-				if (funcList["mov"](&stateReg, dst) == Result::RES_ERR)
+				if (funcList["mov"](&stateReg, dst, nullptr) == Result::RES_ERR)
 					return Result::RES_ERR;
 			}
 			Register zero;
 			zero.type = RegType::REG_INT; zero.readOnly = false;
 			zero.n.i = 0; zero.gcFlag = true;
-			if (funcList["sub"](&stateReg, &zero) == Result::RES_ERR)
+			if (funcList["sub"](&stateReg, &zero, nullptr) == Result::RES_ERR)
 				return Result::RES_ERR;
 			return Result::RES_OK;
 		};
@@ -537,7 +537,7 @@ namespace NSASM {
 			string s; stateReg >> s;
 			ss << s; float f = 0.0F; ss >> f;
 			if (f == 0.0F) {
-				return funcList["jmp"](dst, src);
+				return funcList["jmp"](dst, src, nullptr);
 			}
 			return Result::RES_OK;
 		};
@@ -547,7 +547,7 @@ namespace NSASM {
 			string s; stateReg >> s;
 			ss << s; float f = 0.0F; ss >> f;
 			if (f != 0.0F) {
-				return funcList["jmp"](dst, src);
+				return funcList["jmp"](dst, src, nullptr);
 			}
 			return Result::RES_OK;
 		};
@@ -557,7 +557,7 @@ namespace NSASM {
 			string s; stateReg >> s;
 			ss << s; float f = 0.0F; ss >> f;
 			if (f > 0.0F) {
-				return funcList["jmp"](dst, src);
+				return funcList["jmp"](dst, src, nullptr);
 			}
 			return Result::RES_OK;
 		};
@@ -567,7 +567,7 @@ namespace NSASM {
 			string s; stateReg >> s;
 			ss << s; float f = 0.0F; ss >> f;
 			if (f < 0.0F) {
-				return funcList["jmp"](dst, src);
+				return funcList["jmp"](dst, src, nullptr);
 			}
 			return Result::RES_OK;
 		};
@@ -710,12 +710,12 @@ namespace NSASM {
 				Register* reg = eval(src);
 				if (reg == nullptr) return Result::RES_ERR;
 				if (useReg->m.count(*reg) == 0) return Result::RES_ERR;
-				Result res = funcList["mov"](dst, &useReg->m[*reg]);
+				Result res = funcList["mov"](dst, &useReg->m[*reg], nullptr);
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
 			} else {
 				if (useReg->m.count(*src) == 0) return Result::RES_ERR;
-				return funcList["mov"](dst, &useReg->m[*src]);
+				return funcList["mov"](dst, &useReg->m[*src], nullptr);
 			}
 		};
 
@@ -780,7 +780,7 @@ namespace NSASM {
 			case RegType::REG_CODE: reg.s = "code"; break;
 			case RegType::REG_MAP: reg.s = "map"; break;
 			}
-			return funcList["mov"](dst, &reg);
+			return funcList["mov"](dst, &reg, nullptr);
 		};
 
 		funcList["len"] = $OP_{
@@ -797,7 +797,7 @@ namespace NSASM {
 				if (src->type != RegType::REG_STR) return Result::RES_ERR;
 				reg.n.i = src->s.length();
 			}
-			return funcList["mov"](dst, &reg);
+			return funcList["mov"](dst, &reg, nullptr);
 		};
 
 		funcList["ctn"] = $OP_{
@@ -814,7 +814,7 @@ namespace NSASM {
 				if (dst->type != RegType::REG_STR) return Result::RES_ERR;
 				reg.n.i = dst->s.find(src->s) != dst->s.npos ? 1 : 0;
 			}
-			return funcList["mov"](&stateReg, &reg);
+			return funcList["mov"](&stateReg, &reg, nullptr);
 		};
 
 		funcList["equ"] = $OP_{
@@ -826,7 +826,7 @@ namespace NSASM {
 			reg.type = RegType::REG_INT;
 			reg.readOnly = true; reg.gcFlag = true;
 			reg.n.i = dst->s == src->s ? 0 : 1;
-			return funcList["mov"](&stateReg, &reg);
+			return funcList["mov"](&stateReg, &reg, nullptr);
 		};
 		
 	}

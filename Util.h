@@ -147,6 +147,7 @@ namespace NSASM {
 		static void formatString(string& var);
 		static string formatLambda(string var);
 		static string preProcessCode(string var);
+		static map<string, string> getStrings(string var, string& out);
 		static map<string, string> getSegments(string var);
 		static string getSegment(string var, string head);
 		static vector<string> parseArgs(string str, char split);
