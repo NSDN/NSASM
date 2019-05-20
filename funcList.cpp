@@ -88,6 +88,13 @@ namespace NSASM {
 		};
 
 		funcList["mov"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -324,6 +331,17 @@ namespace NSASM {
 		};
 
 		funcList["add"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["add"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -348,6 +366,17 @@ namespace NSASM {
 		};
 
 		funcList["sub"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["sub"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -372,6 +401,17 @@ namespace NSASM {
 		};
 
 		funcList["mul"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mul"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -384,6 +424,17 @@ namespace NSASM {
 		};
 
 		funcList["div"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["div"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -396,6 +447,17 @@ namespace NSASM {
 		};
 
 		funcList["mod"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mod"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -408,6 +470,17 @@ namespace NSASM {
 		};
 
 		funcList["and"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["and"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -420,6 +493,17 @@ namespace NSASM {
 		};
 
 		funcList["or"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["or"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -432,6 +516,17 @@ namespace NSASM {
 		};
 
 		funcList["xor"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["xor"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -451,6 +546,17 @@ namespace NSASM {
 		};
 
 		funcList["shl"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["shl"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -463,6 +569,17 @@ namespace NSASM {
 		};
 
 		funcList["shr"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["shr"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -572,6 +689,32 @@ namespace NSASM {
 			return Result::RES_OK;
 		};
 
+		funcList["loop"] = $OP_{
+			if (dst == nullptr) return Result::RES_ERR;
+			if (src == nullptr) return Result::RES_ERR;
+			if (ext == nullptr) return Result::RES_ERR;
+
+			if (dst->type != RegType::REG_INT) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
+			if (src->type != RegType::REG_INT) return Result::RES_ERR;
+			if (ext->type != RegType::REG_STR) return Result::RES_ERR;
+			if (!verifyWord(ext->s, WordType::WD_TAG)) return Result::RES_ERR;
+
+			if (src->n.i > 0) {
+				if (funcList["inc"](dst, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+			} else {
+				if (funcList["dec"](dst, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+			}
+			if (funcList["cmp"](dst, src, nullptr) == Result::RES_ERR)
+				return Result::RES_ERR;
+			if (funcList["jnz"](ext, nullptr, nullptr) == Result::RES_ERR)
+				return Result::RES_ERR;
+			
+			return Result::RES_OK;
+		};
+
 		funcList["end"] = $OP_{
 			if (dst == nullptr && src == nullptr)
 				return Result::RES_ETC;
@@ -674,6 +817,29 @@ namespace NSASM {
 			return Result::RES_OK;
 		};
 
+		funcList["par"] = $OP_{
+			if (dst == nullptr) return Result::RES_ERR;
+			if (src == nullptr) return Result::RES_ERR;
+			if (ext == nullptr) return Result::RES_ERR;
+
+			if (dst->type != RegType::REG_MAP) return Result::RES_ERR;
+			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
+			if (ext->type != RegType::REG_INT) return Result::RES_ERR;
+
+			Register reg; Register count;
+			count.type == RegType::REG_INT;
+			count.readOnly = false;
+			for (int i = 0; i < ext->n.i; i++) {
+				count.n.i = i;
+				if (funcList["eval"](&reg, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["put"](dst, &count, &reg) == Result::RES_ERR)
+					return Result::RES_ERR;
+			}
+
+			return Result::RES_OK;
+		};
+
 		funcList["use"] = $OP_{
 			if (src != nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
@@ -685,6 +851,13 @@ namespace NSASM {
 		};
 
 		funcList["put"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["use"](dst, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["put"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (useReg == nullptr) return Result::RES_ERR;
@@ -700,6 +873,13 @@ namespace NSASM {
 		};
 
 		funcList["get"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["use"](dst, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["get"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -720,6 +900,17 @@ namespace NSASM {
 		};
 
 		funcList["cat"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["cat"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
@@ -742,6 +933,17 @@ namespace NSASM {
 		};
 
 		funcList["dog"] = $OP_{
+			if (ext != nullptr) {
+				if (funcList["push"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["dog"](src, ext, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["mov"](dst, src, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				if (funcList["pop"](src, nullptr, nullptr) == Result::RES_ERR)
+					return Result::RES_ERR;
+				return Result::RES_OK;
+			}
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->readOnly) return Result::RES_ERR;
