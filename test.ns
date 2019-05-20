@@ -61,5 +61,8 @@ run <main>
 	prt "Marco Expandation Test"
 	printInfo<0x32, 123.0F, 'A', "Gensokyo">
 
+    prt "Test point ( 1, 2, 3 )"
+    prt "Test seg { \"key\": \"value\" }"
+
     end
 }

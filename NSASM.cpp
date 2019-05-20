@@ -234,7 +234,7 @@ namespace NSASM {
 				reg->gcFlag = true;
 				reg->m.clear();
 				Util::decodeLambda(code);
-				funcList["mov"](&regGroup[regCnt], reg);
+				funcList["mov"](&regGroup[regCnt], reg, nullptr);
 				delete reg;
 
 				stringstream ss;
@@ -419,8 +419,8 @@ namespace NSASM {
 	}
 
 	NSASM::Result NSASM::execute(string var) {
-		string op, dst, src; size_t pos;
-		Register* dr = nullptr; Register* sr = nullptr;
+		string op, dst, src, ext; size_t pos;
+		Register* dr = nullptr; Register* sr = nullptr; Register* er = nullptr;
 
 		if ((pos = var.find(' ')) != var.npos)
 			op = var.substr(0, pos);
@@ -445,24 +445,21 @@ namespace NSASM {
 				sr = getRegister(src);
 			} else {
 				// Normal code
-				if (
-					verifyWord(var.substr(op.length() + 1), WordType::WD_STR) ||
-					verifyWord(var.substr(op.length() + 1), WordType::WD_CHAR)
-				) {
-					dst = var.substr(op.length() + 1);
-					src = "";
-				} else {
-					dst = var.substr(op.length() + 1);
-					if ((pos = dst.find(',')) != var.npos)
-						dst = dst.substr(0, pos);
-					if (var.length() <= op.length() + 1 + dst.length())
-						src = "";
-					else if (var[op.length() + 1 + dst.length()] == ',')
-						src = var.substr(op.length() + 1 + dst.length() + 1);
-					else src = "";
-				}
+				string regs = var.substr(op.length() + 1), out = "";
+				auto strings = Util::getStrings(regs, out);
+				auto args = Util::parseArgs(out, ',');
+				for (int i = 0; i < args.size(); i++)
+					for (auto itStr = strings.begin(); itStr != strings.end(); itStr++)
+						Util::replace(args[i], itStr->first, itStr->second);
+
+				dst = src = ext = "";
+				if (args.size() > 0) dst = args[0];
+				if (args.size() > 1) src = args[1];
+				if (args.size() > 2) ext = args[2];
+
 				dr = getRegister(dst);
 				sr = getRegister(src);
+				er = getRegister(ext);
 			}
 		}
 
@@ -471,9 +468,10 @@ namespace NSASM {
 
 		prevDstReg = (dr != nullptr) ? *dr : prevDstReg;
 
-		Result res = funcList[op](dr, sr);
+		Result res = funcList[op](dr, sr, er);
 		if (dr != nullptr) if (dr->gcFlag) _gc(dr); 
 		if (sr != nullptr) if (sr->gcFlag) _gc(sr);
+		if (er != nullptr) if (er->gcFlag) _gc(er);
 		return res;
 	}
 	NSASM::Register* NSASM::run() {

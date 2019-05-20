@@ -16,7 +16,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.52"; }
+		static string ver() { return "0.54"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
@@ -139,8 +139,8 @@ namespace NSASM {
 			bool readOnly; bool gcFlag;
 		};
 
-		typedef function<Result(Register*, Register*)> Operator;
-		#define $OP_ [&](Register* dst, Register* src) -> Result
+		typedef function<Result(Register*, Register*, Register*)> Operator;
+		#define $OP_ [&](Register* dst, Register* src, Register* ext) -> Result
 
 		Result execute(string var);
 		Register* run();
