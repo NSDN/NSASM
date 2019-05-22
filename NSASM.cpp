@@ -443,6 +443,9 @@ namespace NSASM {
 				dr = new Register(); dr->gcFlag = true;
 				dr->readOnly = true; dr->type = RegType::REG_STR; dr->s = dst;
 				sr = getRegister(src);
+			} else if (op == "rem") {
+				// Comment
+				return Result::RES_OK;
 			} else {
 				// Normal code
 				string regs = var.substr(op.length() + 1), out = "";
