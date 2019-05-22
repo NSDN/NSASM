@@ -187,7 +187,7 @@ namespace NSASM {
 				a = var.substr(0, begin);
 				b = var.substr(begin, end - begin + 1);
 				c = var.substr(end + 1);
-				encodeLambda(b);
+				encodeLambda(b); // Here do not modify b's length
 				var = a + b + c;
 				state = IDLE;
 				break;
@@ -230,10 +230,11 @@ namespace NSASM {
 				a = str.substr(0, begin);
 				b = str.substr(begin, end - begin + 1);
 				c = str.substr(end + 1);
-				key = "_str_" + strHash(b) + "_";
+				key = "_str_" + strHash(b) + "_"; // Here b's length is modified
 				strings[key] = b;
 				str = a + key + c;
 				state = IDLE;
+				i = begin + key.length(); // Fix the i
 				break;
 			default:
 				break;
