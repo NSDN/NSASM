@@ -9,7 +9,7 @@ using namespace std;
 
 #define CODE_HEADER "HELLO GENSOKYO!"
 #define CODE_HEADER_LEN 16
-#define CODE_MAX_SIZE 4096
+#define CODE_MAX_SIZE 0x8000
 
 const static unsigned char inlineCode[CODE_MAX_SIZE] = CODE_HEADER;
 

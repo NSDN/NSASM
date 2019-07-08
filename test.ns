@@ -1,39 +1,39 @@
 run <main>
 
 .print<value> {
-	prt value
+    prt value
 }
 
 .printInfo<a, b, c, d> {
-	prt "Test Output:"
+    prt "Test Output:"
 
-	out '\t'
-	out "a is: "
-	prt a
+    out '\t'
+    out "a is: "
+    prt a
 
-	out '\t'
-	out "b is: "
-	prt b
+    out '\t'
+    out "b is: "
+    prt b
 
-	out '\t'
-	out "c is: "
-	prt c
+    out '\t'
+    out "c is: "
+    prt c
 
-	out '\t'
-	out "d is: "
-	prt d
+    out '\t'
+    out "d is: "
+    prt d
 }
 
 <main> {
-	map m1 = M(
-		mov r0, 20
-		mov r1, 0
-	[head]
-		mov r2, r1
-		mul r2, r1
-		put r1, r2
-		loop r1, r0, [head]
-	)
+    map m1 = M(
+        mov r0, 20
+        mov r1, 0
+    [head]
+        mov r2, r1
+        mul r2, r1
+        put r1, r2
+        loop r1, r0, [head]
+    )
 
     use m1
     mov r0, 20
@@ -43,7 +43,7 @@ run <main>
     out r2
     out ", "
     loop r1, r0, [work]
-	out '\n'
+    out '\n'
 
     code c = (
         run <test1>
@@ -61,10 +61,10 @@ run <main>
     out "result is "
     print<r0>
 
-	prt "Marco Expandation Test"
-	printInfo<0x32, 123.0F, 'A', "Gensokyo">
+    prt "Marco Expandation Test"
+    printInfo<0x32, 123.0F, 'A', "Gensokyo">
 
-	 prt "Test point ( 1, 2, 3 )"
+     prt "Test point ( 1, 2, 3 )"
      prt "Test seg { \"key\": \"value\" }"
 
     end
