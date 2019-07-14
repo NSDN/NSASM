@@ -16,20 +16,21 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.54"; }
+		static string ver() { return "0.60"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
 		};
 		
 		enum RegType {
-			REG_CHAR, REG_STR, REG_INT, REG_FLOAT, REG_CODE, REG_MAP
+			REG_CHAR, REG_STR, REG_INT, REG_FLOAT,
+			REG_CODE, REG_MAP, REG_PAR, REG_NUL
 		};
 
 		class Register {
 		public:
 			Register() {
-				this->type = RegType::REG_INT;
+				this->type = RegType::REG_NUL;
 				this->readOnly = false;
 				this->gcFlag = false;
 				this->n.c = 0;
@@ -47,6 +48,7 @@ namespace NSASM {
 				case RegType::REG_STR: s = reg.s; break;
 				case RegType::REG_CODE: s = reg.s; break;
 				case RegType::REG_MAP: m = reg.m; break;
+				case RegType::REG_PAR: s = reg.s; break;
 				}
 			}
 			~Register() {
@@ -66,6 +68,7 @@ namespace NSASM {
 				case RegType::REG_STR: s = reg.s; break;
 				case RegType::REG_CODE: s = reg.s; break;
 				case RegType::REG_MAP: m = reg.m; break;
+				case RegType::REG_PAR: s = reg.s; break;
 				}
 				return *this;
 			}
@@ -77,6 +80,7 @@ namespace NSASM {
 				case RegType::REG_FLOAT: parser << this->n.f; s = parser.str(); break;
 				case RegType::REG_STR: s = this->s.substr(this->sp); break;
 				case RegType::REG_CODE: s = "(\n" + this->s + "\n)"; break;
+				case RegType::REG_PAR: s = this->s; break;
 				case RegType::REG_MAP:
 					string a = "", b = ""; s = "M(\n"; Register reg;
 					for (auto it = this->m.begin(); it != this->m.end(); it++) {
@@ -103,6 +107,8 @@ namespace NSASM {
 					l = (float) h(left.s); break;
 				case RegType::REG_MAP:
 					return false;
+				case RegType::REG_PAR:
+					l = (float) h(left.s); break;
 				default:
 					return false;
 				}
@@ -119,6 +125,8 @@ namespace NSASM {
 					r = (float) h(right.s); break;
 				case RegType::REG_MAP:
 					return false;
+				case RegType::REG_PAR:
+					r = (float) h(right.s); break;
 				default:
 					return false;
 				}
@@ -142,6 +150,9 @@ namespace NSASM {
 		typedef function<Result(Register*, Register*, Register*)> Operator;
 		#define $OP_ [&](Register* dst, Register* src, Register* ext) -> Result
 
+		typedef function<Register*(Register*)> Param; // if reg is null, it's read, else write
+		#define $PA_ [&](Register* reg) -> Register*
+
 		Result execute(string var);
 		Register* run();
 		void call(string segName);
@@ -154,10 +165,12 @@ namespace NSASM {
 		int regCnt;
 		vector<Register> regGroup;
 		map<string, Operator> funcList;
+		map<string, Param> paramList;
 
 		virtual NSASM* instance(NSASM& super, map<string, string>& code);
 		Register* eval(Register* reg);
 		void loadFuncList();
+		void loadParamList();
 
 		NSASM(NSASM& super, map<string, string>& code);
 
@@ -165,7 +178,7 @@ namespace NSASM {
 		enum WordType {
 			WD_REG, WD_CHAR, WD_STR, WD_INT,
 			WD_FLOAT, WD_VAR, WD_TAG, WD_SEG,
-			WD_CODE, WD_MAP
+			WD_CODE, WD_MAP, WD_PAR
 		};
 
 		map<string, Register> heapManager;

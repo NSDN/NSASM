@@ -981,6 +981,8 @@ namespace NSASM {
 			case RegType::REG_STR: reg.s = "str"; break;
 			case RegType::REG_CODE: reg.s = "code"; break;
 			case RegType::REG_MAP: reg.s = "map"; break;
+			case RegType::REG_PAR: reg.s = "par"; break;
+			case RegType::REG_NUL: reg.s = "nul"; break;
 			}
 			return funcList["mov"](dst, &reg, nullptr);
 		};
