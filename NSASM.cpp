@@ -38,6 +38,9 @@ namespace NSASM {
 		funcList.clear();
 		loadFuncList();
 
+		paramList.clear();
+		loadParamList();
+
 		segs.clear();
 		this->code.clear();
 		if (appendCode(code) == Result::RES_ERR) {
@@ -105,12 +108,14 @@ namespace NSASM {
 			if (var[0] == 'm' || var[0] == 'M') {
 				return verifyBound(var.substr(1), '(', ')');
 			} else return false;
+		case WordType::WD_PAR:
+			return paramList.count(var) != 0;
 		case WordType::WD_VAR:
 			return !verifyWord(var, WordType::WD_REG) && !verifyWord(var, WordType::WD_CHAR) &&
 				!verifyWord(var, WordType::WD_STR) && !verifyWord(var, WordType::WD_INT) &&
 				!verifyWord(var, WordType::WD_FLOAT) && !verifyWord(var, WordType::WD_TAG) &&
 				!verifyWord(var, WordType::WD_SEG) && !verifyWord(var, WordType::WD_CODE) &&
-				!verifyWord(var, WordType::WD_MAP);
+				!verifyWord(var, WordType::WD_MAP) && !verifyWord(var, WordType::WD_PAR);
 		}
 		return false;
 	}
@@ -118,7 +123,14 @@ namespace NSASM {
 		if (var.length() == 0) return nullptr;
 
 		stringstream parser;
-		if (verifyWord(var, WordType::WD_REG)) {
+		if (verifyWord(var, WordType::WD_PAR)) {
+			Register* reg = new Register();
+			reg->type = RegType::REG_PAR;
+			reg->readOnly = true;
+			reg->gcFlag = true;
+			reg->s = var;
+			return reg;
+		} else if (verifyWord(var, WordType::WD_REG)) {
 			// Register
 			int index = -1;
 			parser.clear(); parser << var.substr(1);
@@ -469,9 +481,34 @@ namespace NSASM {
 		if (funcList.count(op) == 0)
 			return verifyWord(op, WordType::WD_TAG) ? Result::RES_OK : Result::RES_ERR;
 
-		prevDstReg = (dr != nullptr) ? *dr : prevDstReg;
+		Register* tdr = nullptr; Register* tsr = nullptr; Register* ter = nullptr;
+		string pdr = "", psr = "", per = "";
+		if (dr != nullptr && dr->type == RegType::REG_PAR) {
+			pdr = dr->s;
+			tdr = paramList[pdr](nullptr);
+			_gc(dr); dr = new Register(*tdr);
+		}
+		if (sr != nullptr && sr->type == RegType::REG_PAR) {
+			psr = sr->s;
+			tsr = paramList[psr](nullptr);
+			_gc(sr); sr = new Register(*tsr);
+		}
+		if (er != nullptr && er->type == RegType::REG_PAR) {
+			per = er->s;
+			ter = paramList[per](nullptr);
+			_gc(er); er = new Register(*ter);
+		}
 
+		prevDstReg = (dr != nullptr) ? *dr : prevDstReg;
 		Result res = funcList[op](dr, sr, er);
+
+		if (ter != nullptr && ter != er)
+			paramList[per](er);
+		if (tsr != nullptr && tsr != sr)
+			paramList[psr](sr);
+		if (tdr != nullptr && tdr != dr)
+			paramList[pdr](dr);
+
 		if (dr != nullptr) if (dr->gcFlag) _gc(dr); 
 		if (sr != nullptr) if (sr->gcFlag) _gc(sr);
 		if (er != nullptr) if (er->gcFlag) _gc(er);
