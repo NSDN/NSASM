@@ -9,6 +9,12 @@
 #include <stack>
 #include <map>
 
+#define USE_MULTITHREAD
+
+#ifdef USE_MULTITHREAD
+#include <mutex>
+#endif
+
 namespace NSASM {
 
 	using namespace std;
@@ -16,7 +22,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.60"; }
+		static string ver() { return "0.61"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
@@ -26,6 +32,55 @@ namespace NSASM {
 			REG_CHAR, REG_STR, REG_INT, REG_FLOAT,
 			REG_CODE, REG_MAP, REG_PAR, REG_NUL
 		};
+
+	#ifdef USE_MULTITHREAD
+		template<typename T>
+		class SafePool {
+			private:
+				vector<T> pool;
+				vector<int> pos;
+				mutex lock;
+				int now;
+
+			public:
+				SafePool() : pool(), pos(), lock() { now = 0; }
+				~SafePool() { pool.clear(); pos.clear(); }
+
+				int count() {
+					lock.lock();
+					int s = pool.size();
+					lock.unlock();
+					return s;
+				}
+
+				void add(T value) {
+					lock.lock();
+					pool.push_back(value);
+					pos.push_back(now);
+					now += 1;
+					lock.unlock();
+				}
+
+				void insert(int index, T value) {
+					lock.lock();
+					pool.push_back(value);
+					pos.push_back(index);
+					lock.unlock();
+				}
+
+				T operator[](const int index) {
+					lock.lock();
+					int i;
+					for (i = 0; i < pos.size(); i++)
+						if (pos[i] == index)
+							break;
+					if (i >= pos.size()) return T();
+					T t = pool[i];
+					lock.unlock();
+					return t;
+				}
+		};
+	#endif
 
 		class Register {
 		public:
@@ -159,6 +214,13 @@ namespace NSASM {
 
 		NSASM(int heapSize, int stackSize, int regCnt, map<string, string>& code);
 		~NSASM();
+
+#ifdef USE_MULTITHREAD
+	protected:
+		void setArgument(Register* reg);
+	private:
+		Register* argReg;
+#endif
 
 	protected:
 		Register* useReg = nullptr;

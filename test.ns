@@ -24,6 +24,40 @@ run <main>
 	prt d
 }
 
+<par_run> {
+	prt "Init core code..."
+	code coreCode = (
+		prt "Thread-", tid, " running!"
+
+		mov r0, 0
+		mov r1, arg
+		mov r2, 0
+	[loop_head]
+		add r2, r0
+		loop r0, r1, [loop_head]
+		ret r2
+	)
+
+	prt "Init input args..."
+	map args = M(
+		mov r0, 0
+		mov r1, 16
+	[args_head]
+		add r2, r0, 1
+		mul r2, 2
+		put r0, r2
+		loop r0, r1, [args_head]
+	)
+
+	prt "Starting threads..."
+	par r0, coreCode, args
+	prt "Done."
+	prt "\nResult is:"
+	prt r0
+	prt "Press any key to continue."
+	in r0
+}
+
 <main> {
 	map m1 = M(
 		mov r0, 20
@@ -64,8 +98,12 @@ run <main>
 	prt "Marco Expandation Test"
 	printInfo<0x32, 123.0F, 'A', "Gensokyo">
 
-	 prt "Test point ( 1, 2, 3 )"
-     prt "Test seg { \"key\": \"value\" }"
+	prt "Test point ( 1, 2, 3 )"
+    prt "Test seg { \"key\": \"value\" }"
+	prt "\n"
+
+	prt "Par-Run Test..."
+	call <par_run>
 
     end
 }

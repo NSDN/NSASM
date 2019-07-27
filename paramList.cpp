@@ -2,6 +2,9 @@
 
 #include "Util.h"
 
+#ifdef USE_MULTITHREAD
+#include <thread>
+#endif
 #include <random>
 std::default_random_engine e;
 std::uniform_real_distribution<float> u(0, 1);
@@ -114,6 +117,41 @@ namespace NSASM {
             funcList["prt"](reg, nullptr, nullptr);
             return reg;
         };
+
+	#ifdef USE_MULTITHREAD
+        paramList["arg"] = $PA_{
+            if (reg == nullptr) {
+                Register* res = new Register();
+				res->gcFlag = true;
+                if (argReg == nullptr) {
+                    res->type = RegType::REG_STR;
+                    res->readOnly = true;
+                    res->s = "null";
+                } else {
+                    *res = *argReg;
+                }
+                return res;
+            }
+            return reg;
+        };
+
+        paramList["tid"] = $PA_{
+            if (reg == nullptr) {
+                ostringstream oss;
+                oss << this_thread::get_id();
+                string stid = oss.str();
+                int tid = stoi(stid);
+
+                Register* res = new Register();
+                res->type = RegType::REG_INT;
+                res->readOnly = true;
+                res->gcFlag = true;
+                res->n.i = tid;
+                return res;
+            }
+            return reg;
+        };
+	#endif
 
     }
 

@@ -2,13 +2,17 @@
 #include "Util.h"
 
 #include <fstream>
+#include <mutex>
 using namespace std;
 
 #include <string.h>
 #include <time.h>
 
+static mutex io_lock;
+
 int main(int argc, char* argv[]) {
-	NSASM::Util::I().FileInput = [](string path) -> string {
+	NSASM::Util::I().FileInput = [&](string path) -> string {
+		io_lock.lock();
 		ifstream reader; stringstream str; string buf;
 		reader.open(path, ifstream::in); str.clear();
 		while (!reader.eof()) {
@@ -16,9 +20,12 @@ int main(int argc, char* argv[]) {
 			str << buf << endl;
 		}
 		reader.close();
-		return str.str();
+		string s = str.str();
+		io_lock.unlock();
+		return s;
 	};
-	NSASM::Util::I().BinaryInput = [](string path) ->vector<unsigned char> { 
+	NSASM::Util::I().BinaryInput = [&](string path) ->vector<unsigned char> { 
+		io_lock.lock();
 		vector<unsigned char> res;
 		ifstream reader; char buf;
 		reader.open(path, ifstream::binary);
@@ -28,14 +35,30 @@ int main(int argc, char* argv[]) {
 		res.resize(fileSiz);
 		reader.read((char*)res.data(), fileSiz);
 		reader.close();
+		io_lock.unlock();
 		return res;
 	};
-	NSASM::Util::I().BinaryOutput = [](string path, vector<unsigned char> data) -> void {
+	NSASM::Util::I().BinaryOutput = [&](string path, vector<unsigned char> data) -> void {
+		io_lock.lock();
 		ofstream writer;
 		writer.open(path, ofstream::binary);
 		writer.write((const char*)data.data(), data.size());
 		writer.flush();
 		writer.close();
+		io_lock.unlock();
+	};
+	NSASM::Util::I().Output = [&](string str) -> void {
+		io_lock.lock();
+		cout << str;
+		fflush(stdout);
+		io_lock.unlock();
+	};
+	NSASM::Util::I().Input = [&](void) -> string {
+		io_lock.lock();
+		string s = "";
+		getline(cin, s);
+		io_lock.unlock();
+		return s;
 	};
 
 	NSASM::Util::print("NyaSama Assembly Script Module\n");
