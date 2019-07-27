@@ -2,6 +2,10 @@
 
 #include "Util.h"
 
+#ifdef USE_MULTITHREAD
+#include <thread>
+#endif
+
 namespace NSASM {
 
 	void NSASM::loadFuncList() {
@@ -268,6 +272,12 @@ namespace NSASM {
 			if (dst == nullptr) return Result::RES_ERR;
 			stringstream ss; string s;
 			if (src != nullptr) {
+				if (ext != nullptr) {
+					string a, b, c;
+					*dst >> a; *src >> b; *ext >> c;
+					Util::print(a + b + c + '\n');
+					return Result::RES_OK;
+				}
 				if (dst->type == RegType::REG_STR) {
 					if (dst->readOnly) return Result::RES_ERR;
 					if (src->type == RegType::REG_CHAR && src->n.c == '\b') {
@@ -817,28 +827,59 @@ namespace NSASM {
 			return Result::RES_OK;
 		};
 
+	#ifdef USE_MULTITHREAD
 		funcList["par"] = $OP_{
 			if (dst == nullptr) return Result::RES_ERR;
 			if (src == nullptr) return Result::RES_ERR;
 			if (ext == nullptr) return Result::RES_ERR;
 
-			if (dst->type != RegType::REG_MAP) return Result::RES_ERR;
+			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
-			if (ext->type != RegType::REG_INT) return Result::RES_ERR;
+			if (ext->type != RegType::REG_MAP) return Result::RES_ERR;
 
-			Register reg; Register count;
-			count.type == RegType::REG_INT;
-			count.readOnly = false;
-			for (int i = 0; i < ext->n.i; i++) {
-				count.n.i = i;
-				if (funcList["eval"](&reg, src, nullptr) == Result::RES_ERR)
-					return Result::RES_ERR;
-				if (funcList["put"](dst, &count, &reg) == Result::RES_ERR)
-					return Result::RES_ERR;
+			auto map = ext->m;
+			if (map.size() != 0) {
+				int cnt = map.size();
+				auto code = Util::getSegments(src->s);
+				vector<Register> keys;
+				for (auto it = map.begin(); it != map.end(); it++)
+					keys.push_back(it->first);
+
+				vector<thread> threads;
+				SafePool<NSASM*> runnerPool;
+				SafePool<Register> outputPool;
+				for (int i = 0; i < cnt; i++) {
+					NSASM* core = instance(*this, code);
+					core->setArgument(&map[keys[i]]);
+					runnerPool.add(core);
+				}
+				for (int i = 0; i < cnt; i++)
+					threads.push_back(
+						thread([&](int index) -> void {
+							NSASM* core = runnerPool[index];
+							Register reg(*(core->run()));
+							outputPool.insert(index, reg);
+						}, i)
+					);
+
+				for (int i = 0; i < cnt; i++)
+					threads[i].join();
+				while (outputPool.count() < cnt)
+					funcList["nop"](nullptr, nullptr, nullptr);
+
+				for (int i = 0; i < cnt; i++)
+					delete runnerPool[i];
+
+				dst->type = RegType::REG_MAP;
+				dst->readOnly = false;
+				dst->m.clear();
+				for (int i = 0; i < cnt; i++)
+					dst->m[keys[i]] = outputPool[i];
 			}
 
 			return Result::RES_OK;
 		};
+	#endif
 
 		funcList["use"] = $OP_{
 			if (src != nullptr) return Result::RES_ERR;

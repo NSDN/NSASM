@@ -34,6 +34,9 @@ namespace NSASM {
 		}
 
 		useReg = &regGroup[regCnt];
+	#ifdef USE_MULTITHREAD
+		argReg = nullptr;
+	#endif
 
 		funcList.clear();
 		loadFuncList();
@@ -304,7 +307,6 @@ namespace NSASM {
 		return Result::RES_OK;
 	}
 	void NSASM::copyRegGroup(NSASM& super) {
-		super.regGroup[super.regCnt] = *super.useReg;
 		for (int i = 0; i < super.regGroup.size(); i++)
 			this->regGroup[i] = super.regGroup[i];
 	}
@@ -418,6 +420,14 @@ namespace NSASM {
 	NSASM* NSASM::instance(NSASM& super, map<string, string>& code) {
 		return new NSASM(super, code);
 	}
+
+#ifdef USE_MULTITHREAD
+	void NSASM::setArgument(Register* reg) {
+		if (argReg != nullptr)
+			delete argReg;
+		argReg = new Register(*reg);
+	}
+#endif
 
 	NSASM::Register* NSASM::eval(Register* reg) {
 		if (reg == nullptr) return nullptr;
