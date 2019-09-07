@@ -15,6 +15,8 @@
 #include <mutex>
 #endif
 
+#include <cstdint>
+
 namespace NSASM {
 
 	using namespace std;
@@ -22,7 +24,7 @@ namespace NSASM {
 	class NSASM {
 
 	public:
-		static string ver() { return "0.61"; }
+		static string ver() { return "0.61-bcc"; }
 
 		enum Result {
 			RES_OK, RES_ERR, RES_ETC
@@ -228,6 +230,40 @@ namespace NSASM {
 		vector<Register> regGroup;
 		map<string, Operator> funcList;
 		map<string, Param> paramList;
+
+		/*---------------- for bytecode compiler ----------------*/
+		typedef struct {
+			uint8_t     op_index;       // 1 byte, 指令编号低 8 位
+			uint8_t     dst_type;       // 1 byte, 低 7 位为目标操作数类型
+					// dst_type & 0x80    1 bit, 指令编号第 9 位, 目前作为保留位
+			uint32_t    dst;            // 4 bytes, 立即数或虚拟地址
+			uint8_t     src_type;       // 1 byte, 低 7 位为源操作数类型
+					// src_type & 0x80    1 bit, 指令编号第 10 位, 目前作为保留位
+			uint32_t    src;            // 4 bytes, 立即数或虚拟地址
+			uint8_t     ext_type;       // 1 byte, 低 7 位为附加操作数类型
+					// ext_type & 0x80    1 bit, 指令编号第 11 位, 目前作为保留位
+			uint32_t    ext;            // 4 bytes, 立即数或虚拟地址
+		} NSVM_OP_L;                    // 16 bytes
+
+		typedef struct {
+			uint8_t     op_index;       // 1 byte, 指令编号
+			uint8_t     dst_type;       // 1 byte, 目标操作数类型
+			uint16_t    dst;            // 2 bytes, 立即数或虚拟地址
+			uint8_t     src_type;       // 1 byte, 源操作数类型
+			uint16_t    src;            // 2 bytes, 立即数或虚拟地址
+			uint8_t     reversed;       // 1 byte, 保留
+		} NSVM_OP_S;                    // 8 bytes
+
+		typedef union {
+		public:
+			NSVM_OP_L l;
+			NSVM_OP_S s;
+		} NSVM_OP;
+
+		vector<NSVM_OP> codeSegment;
+		vector<Register> dataSegment;
+		vector<string> stringSegment;
+		/*---------------- for bytecode compiler ----------------*/
 
 		virtual NSASM* instance(NSASM& super, map<string, string>& code);
 		Register* eval(Register* reg);
