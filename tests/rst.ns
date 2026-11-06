@@ -1,0 +1,10 @@
+rem "rst 回到第一条指令，寄存器保持（用寄存器计数才停得下来）"
+<main> {
+	inc r1
+	prt r1
+	cmp r1, 2
+	jg [done]
+	rst
+[done]
+	end
+}

@@ -1,0 +1,12 @@
+rem "run 不返回：目标段执行完后按文件顺序继续下一个段"
+<main> {
+	prt "before run"
+	run <second>
+	prt "unreachable"
+}
+<second> {
+	prt "in second"
+}
+<third> {
+	prt "in third"
+}

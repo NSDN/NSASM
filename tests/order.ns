@@ -1,0 +1,10 @@
+rem "段执行顺序 = 文件顺序（旧版是段名字典序）"
+<zzz> {
+	prt "zzz"
+}
+<aaa> {
+	prt "aaa"
+}
+<mmm> {
+	prt "mmm"
+}

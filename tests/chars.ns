@@ -1,0 +1,22 @@
+rem "字符运算与比较（char 在表达式里提升为 int）"
+<main> {
+	mov r0, 'A'
+	add r0, 1
+	prt r0
+	inc r0
+	prt r0
+	dec r0
+	prt r0
+	cmp r0, 'A'
+	jg [gt]
+	prt "not greater"
+	jmp [after]
+[gt]
+	prt "greater than A"
+[after]
+	mov r1, 'a'
+	mov r2, 'a'
+	sub r1, r2
+	prt r1 + 0
+	end
+}

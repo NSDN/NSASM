@@ -1,0 +1,9 @@
+rem "in 在 EOF 时不应改动寄存器"
+<main> {
+	int v = 7
+	in v
+	prt v
+	in r0
+	prt r0
+	end
+}

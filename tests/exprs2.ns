@@ -1,0 +1,20 @@
+rem "表达式：优先级组合、一元负号、int/float 分界、字符串运算、指令第三操作数"
+<main> {
+	prt 2 + 3 * 4 - 6 / 3
+	prt (2 + 3) * (4 - 6) / 2
+	prt -(-5)
+	prt 10 % 3 + 7 % 4
+	prt 1.5 + 2
+	prt 100 / 8
+	prt 100.0 / 8
+	prt "a" + "b" * 3
+	prt 3 + 4 * 2 / (1 - 5)
+	int k = 4
+	prt -k
+	mov r5, 0
+[again]
+	inc r5
+	loop r5, 2 + 2, [again]
+	prt r5
+	end
+}

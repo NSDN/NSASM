@@ -1,0 +1,4 @@
+rem "被 ld 加载的补丁文件：覆盖 <greet>"
+@<greet> {
+	prt "hello from patch"
+}

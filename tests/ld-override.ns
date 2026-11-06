@@ -1,0 +1,9 @@
+rem "ld 加载外部文件，@<seg> 覆盖已存在的段"
+<greet> {
+	nop
+}
+<main> {
+	ld "lib-greet.ns"
+	call <greet>
+	end
+}

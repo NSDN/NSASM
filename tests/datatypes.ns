@@ -1,0 +1,23 @@
+rem "五种值类型 + type 指令 + 各类型打印"
+<main> {
+	var vi = 42
+	var vf = 2.5
+	var vc = 'A'
+	var vs = "hello"
+	var vcode = ( ret 7 )
+	type r0, vi
+	type r1, vf
+	type r2, vc
+	type r3, vs
+	type r4, vcode
+	prt r0
+	prt r1
+	prt r2
+	prt r3
+	prt r4
+	prt vi
+	prt vf
+	prt vc
+	prt vs
+	end
+}

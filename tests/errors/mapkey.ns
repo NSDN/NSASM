@@ -1,0 +1,5 @@
+<main> {
+	map a = M( put 1, 1 )
+	map b = M( put 2, 2 )
+	put a, b
+}

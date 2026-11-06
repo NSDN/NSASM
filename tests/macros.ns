@@ -1,0 +1,19 @@
+rem "宏：嵌套展开（旧实现只展开一层）、参数不会误替换字符串内容"
+.inner<x> {
+	out "["
+	out x
+	out "]"
+}
+
+.outer<y, z> {
+	inner<y>
+	inner<z>
+	out " a"
+}
+
+<main> {
+	outer<1, 2>
+	outer<'c', "s">
+	prt " a=y" 
+	end
+}

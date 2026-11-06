@@ -1,0 +1,48 @@
+rem "映射：字面量、put/get/len/ctn、表达式值、循环构造、嵌套映射"
+<main> {
+	map m = M(
+		put "a", 1
+		put "b", 2
+		put "c", 3
+	)
+	use m
+	len r0
+	prt r0
+	get r1, "b"
+	prt r1
+	ctn "b"
+	jnz [hasb]
+	prt "no b"
+	jmp [afterb]
+[hasb]
+	prt "has b"
+[afterb]
+
+	put "d", 2 * 21
+	get r2, "d"
+	prt r2
+
+	map sq = M(
+		int i = 0
+[mk]
+		mov r3, i
+		mul r3, i
+		put i, r3
+		inc i
+		cmp i, 5
+		jnz [mk]
+	)
+	use sq
+	len r4
+	prt r4
+	get r5, 3
+	prt r5
+
+	map nested = M(
+		put "inner", M( put 1, "one" )
+	)
+	use nested
+	get r6, "inner"
+	prt r6
+	end
+}

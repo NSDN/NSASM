@@ -1,0 +1,7 @@
+<main> {
+	code self = (
+		eval r0
+	)
+	mov r0, self
+	eval r0
+}

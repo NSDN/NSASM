@@ -1,0 +1,35 @@
+rem "控制流：cmp+jg/jl/jz/jnz、loop 向下、嵌套循环"
+<main> {
+	int sum = 0
+	int i = 1
+[add_loop]
+	add sum, i
+	inc i
+	cmp i, 5
+	jg [add_end]
+	jmp [add_loop]
+[add_end]
+	prt sum
+
+	int cnt = 0
+	mov r0, 5
+[down]
+	inc cnt
+	loop r0, 0, [down]
+	prt cnt
+
+	int total = 0
+	mov r0, 0
+[o]
+	mov r1, 0
+[in]
+	inc total
+	inc r1
+	cmp r1, 3
+	jl [in]
+	inc r0
+	cmp r0, 2
+	jl [o]
+	prt total
+	end
+}

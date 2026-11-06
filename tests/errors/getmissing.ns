@@ -1,0 +1,5 @@
+<main> {
+	map m = M( put "a", 1 )
+	use m
+	get r0, "no-such-key"
+}

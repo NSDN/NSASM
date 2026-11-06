@@ -1,0 +1,29 @@
+rem "映射键：大整数不再被 float 截断合并，字符串键按精确内容区分"
+<main> {
+	map m = m()
+	use m
+	put 16777216, 1
+	put 16777217, 2
+	len r0
+	out "big-int keys: "
+	prt r0
+
+	map s = m()
+	use s
+	put "alpha", 1
+	put "beta", 2
+	put "gamma", 3
+	len r1
+	out "string keys: "
+	prt r1
+
+	get r2, "beta"
+	out "get beta: "
+	prt r2
+
+	use m
+	get r3, 16777217
+	out "get 16777217: "
+	prt r3
+	end
+}

@@ -1,0 +1,15 @@
+rem "段调用：call 会返回（被调段执行到底），嵌套两层"
+<main> {
+	prt "main start"
+	call <sub1>
+	prt "back in main"
+	end
+}
+<sub1> {
+	prt "in sub1"
+	call <sub1b>
+	prt "sub1 done"
+}
+<sub1b> {
+	prt "in sub1b"
+}

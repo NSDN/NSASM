@@ -1,0 +1,19 @@
+rem "in 指令：按目标寄存器类型解析输入，类型不符则寄存器不变"
+<main> {
+	int a = 0
+	in a
+	prt a
+	float f = 0.0
+	in f
+	prt f
+	char c = 'x'
+	in c
+	prt c
+	mov r0, ""
+	in r0
+	prt r0
+	int bad = 5
+	in bad
+	prt bad
+	end
+}

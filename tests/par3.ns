@@ -1,0 +1,16 @@
+rem "par：3 个线程并行，结果映射顺序稳定（键为 int）"
+<main> {
+	code work = (
+		mov r0, arg
+		mul r0, 2
+		ret r0
+	)
+	map in3 = M(
+		put 0, 10
+		put 1, 20
+		put 2, 30
+	)
+	par r9, work, in3
+	prt r9
+	end
+}

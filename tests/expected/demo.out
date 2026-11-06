@@ -1,0 +1,53 @@
+0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 
+this is test1
+this is test2
+result is done
+Marco Expandation Test
+Test Output:
+	a is: 50
+	b is: 123
+	c is: A
+	d is: Gensokyo
+Test point ( 1, 2, 3 )
+Test seg { "key": "value" }
+Par-Run Test...
+Init core code...
+Init input args...
+Starting threads...
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Thread-N running!
+Done.
+Result is:
+M(
+0->1
+1->6
+2->15
+3->28
+4->45
+5->66
+6->91
+7->120
+8->153
+9->190
+10->231
+11->276
+12->325
+13->378
+14->435
+15->496
+)
+Press any key to continue.

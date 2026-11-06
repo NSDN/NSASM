@@ -1,0 +1,27 @@
+run <main>
+
+.print<x, y, z> {
+    out '['
+    out x
+    out ','
+    out y
+    out ','
+    out z
+    out ']'
+}
+
+<main> {
+    prt "print 8x8x8 mat...\n"
+    mov r0, 0
+    [head0]
+        mov r1, 0
+        [head1]
+            mov r2, 0
+            [head2]
+                print<r0, r1, r2>
+            loop r2, 8, [head2]
+            out '\n'
+        loop r1, 8, [head1]
+    loop r0, 8, [head0]
+    end
+}

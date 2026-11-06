@@ -1,0 +1,15 @@
+rem "栈：push/pop 与表达式操作数"
+<main> {
+	mov r0, 10
+	push r0
+	mov r0, 20
+	push r0
+	pop r1
+	pop r2
+	prt r1
+	prt r2
+	push 1 + 2 * 3
+	pop r3
+	prt r3
+	end
+}

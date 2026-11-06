@@ -1,0 +1,11 @@
+rem "变量名不再被「首字母 r 视为寄存器」的旧规则挡住"
+<main> {
+	var result = 42
+	var reason = 8
+	int r_value = 3
+	prt result
+	prt reason + r_value
+	mov r0, result + reason
+	prt r0
+	end
+}

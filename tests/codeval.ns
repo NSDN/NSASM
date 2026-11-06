@@ -1,0 +1,29 @@
+rem "代码段作源操作数会自动执行并取返回值；eval 的两种形式"
+<main> {
+	code five = ( ret 5 )
+	mov r0, 10
+	add r0, five
+	prt r0
+	mov r1, 3
+	sub r1, five
+	prt r1
+	mov r2, 2
+	mul r2, five
+	prt r2
+	mov r3, 0
+	cmp r3, five
+	jl [less]
+	prt "not less"
+	jmp [after]
+[less]
+	prt "less"
+[after]
+	code six = ( ret 6 )
+	prt six
+	eval six
+	prt "eval done"
+	mov r4, 0
+	eval r4, six
+	prt r4
+	end
+}

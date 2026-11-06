@@ -1,0 +1,12 @@
+.<conf> {
+	heap 2
+	stack 32
+	reg 16
+}
+
+<main> {
+	var a = 1
+	var b = 2
+	var c = 3
+	prt "unreachable"
+}

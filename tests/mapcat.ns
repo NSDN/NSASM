@@ -1,0 +1,23 @@
+rem "cat/dog 在映射上的合并与删除"
+<main> {
+	map ma = M(
+		put 1, "a"
+	)
+	map mb = M(
+		put 2, "b"
+		put 3, "c"
+	)
+	cat ma, mb
+	use ma
+	len r0
+	prt r0
+	get r1, 3
+	prt r1
+	dog ma, mb
+	use ma
+	len r2
+	prt r2
+	get r3, 1
+	prt r3
+	end
+}

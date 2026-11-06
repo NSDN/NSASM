@@ -1,0 +1,5 @@
+rem "str 声明出来是只读的，直接 cat 应当报错"
+<main> {
+	str s = "abc"
+	cat s, "d"
+}

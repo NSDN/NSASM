@@ -1,0 +1,41 @@
+rem "字符串：len / ctn / equ / cat / dog / 游标 / char<->str 的 mov"
+<main> {
+	mov r0, "hello world"
+	len r1, r0
+	prt r1
+	ctn r0, "world"
+	jnz [found]
+	prt "ctn failed"
+	jmp [afterctn]
+[found]
+	prt "ctn ok"
+[afterctn]
+	equ r0, "hello world"
+	jz [same]
+	prt "equ failed"
+	jmp [afterequ]
+[same]
+	prt "equ ok"
+[afterequ]
+
+	mov r2, "abc"
+	cat r2, "def"
+	prt r2
+	dog r2, "cd"
+	prt r2
+
+	mov r3, "abcdef"
+	add r3, 2
+	prt r3
+
+	mov r4, "abc"
+	mov r5, 'Z'
+	mov r4, r5
+	prt r4
+
+	mov r6, 'x'
+	mov r7, "MNO"
+	mov r6, r7
+	prt r6
+	end
+}

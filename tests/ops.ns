@@ -1,0 +1,35 @@
+rem "位运算 / 移位 / not / test / 三操作数形式 / out 调试地址"
+<main> {
+	mov r0, 0x0F
+	and r0, 0x33
+	prt r0
+	mov r1, 0x0F
+	or r1, 0x30
+	prt r1
+	mov r2, 0x0F
+	xor r2, 0xFF
+	prt r2
+	mov r3, 0
+	not r3
+	prt r3
+	mov r4, 1
+	shl r4, 4
+	prt r4
+	shr r4, 2
+	prt r4
+	test r4
+	jg [pos]
+	prt "not positive"
+	jmp [after]
+[pos]
+	prt "positive"
+[after]
+	mov r5, 10
+	mov r6, 20
+	add r5, r6, 5
+	prt r5
+	prt r6
+	out 0xFF, r5
+	prt r5, r6, "!"
+	end
+}

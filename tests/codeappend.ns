@@ -1,0 +1,13 @@
+rem "代码段是可变字符串：追加字符串、追加代码段、退格删最后一行"
+<main> {
+	code c = ( prt "one" )
+	eval c
+	prt c, "prt \"two\""
+	eval c
+	prt c, '\b'
+	eval c
+	code d = ( prt "from d" )
+	prt c, d
+	eval c
+	end
+}

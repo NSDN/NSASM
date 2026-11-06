@@ -1,0 +1,6 @@
+.show<a, b> {
+	prt a
+}
+<main> {
+	show<1>
+}

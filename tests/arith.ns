@@ -1,0 +1,28 @@
+rem "四则运算：优先级、括号、一元负号、int/float 混合、字符串运算"
+<main> {
+	mov r0, 1 + 2 * 3
+	prt r0
+	mov r1, (1 + 2) * 3
+	prt r1
+	mov r2, 100 / 7
+	prt r2
+	mov r3, 100 % 7
+	prt r3
+	mov r4, 1.5 * 2 + 0.25
+	prt r4
+	mov r5, -(3 - 10)
+	prt r5
+	int a = 7
+	int b = 5
+	mov r6, a * b - (a + b)
+	prt r6
+	mov r7, "ab" * 3
+	prt r7
+	mov r8, "x" + "y" + 'z'
+	prt r8
+	mov r0, 10
+	inc r0
+	add r0, (a - b) * 100
+	prt r0
+	end
+}

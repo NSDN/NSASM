@@ -1,0 +1,9 @@
+rem "prt / out 单操作数是代码段时应执行并打印返回值"
+<main> {
+	code c = ( ret 99 )
+	prt c
+	out "out="
+	out c
+	out '\n'
+	end
+}

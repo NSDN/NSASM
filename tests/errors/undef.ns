@@ -1,0 +1,3 @@
+<main> {
+	mov r0, no_such_var
+}
