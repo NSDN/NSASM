@@ -180,7 +180,7 @@ cmake --build build && ctest --test-dir build
 | `codeval` | 代码段作源操作数自动执行、`eval` 的两种形式 |
 | `prtcode` | `prt`/`out` 单操作数为代码段 |
 | `stack` | `push`/`pop`、表达式操作数 |
-| `ops` | 位运算、移位、`not`、`test`、三操作数 `add`、`out 0xFF` 调试口、三操作数打印 |
+| `ops` | 位运算、移位、`not`、`test`、三操作数 `add`、只读源操作数的三操作数（`mul`/`cat`/`dog`、`dst == src`）、`out 0xFF` 调试口、三操作数打印 |
 | `maps`/`mapcat`/`mapkeys` | 字面量、`put`/`get`/`len`/`ctn`、循环构造、嵌套映射、`cat`/`dog` 合并删除、大整数键 |
 | `exprs2`/`arith` | 优先级组合、一元负号、int/float 分界、字符串 `+`/`*`、指令第三操作数里的表达式 |
 | `order` | 段执行顺序 = 文件顺序 |
@@ -200,6 +200,7 @@ cmake --build build && ctest --test-dir build
 | `control` | `loop` 上限 ≤0 时应递减，我重写时漏了方向判断 → 死循环 | 本次重写 |
 | `override` | `@<不存在的段>` 的装载错误被构造函数吞掉，静默 exit 0 | 本次重写 |
 | `mapkey` | 映射当键会静默合并（`operator<` 认为所有 map 相等）→ 改为显式报错 | 原版设计 |
+| `ops` | 三操作数微码要求源操作数可写（只读参数、立即数失败），且 `dst == src` 时结果被 `pop` 还原 | 原版设计 |
 
 前四个里有两个是「手册里写着能用、实际一用就崩」的指令（`not`、`prt <code>`），
 说明原来完全没有针对指令表的测试。
@@ -228,3 +229,19 @@ sh tests/run.sh ~/build/nsasm/nsasm-legacy   # 旧引擎
 
 Rust 实现已拆分到独立仓库 `nsasm-rs`，移植记录（分层映射、扩展性硬约束、
 与 C++ 的差异、性能、构建注意）见该仓库的 `DESIGN.md`。
+
+## 11. 三操作数（重载）的语义修正
+
+`add/sub/mul/div/mod/and/or/xor/shl/shr/cat/dog` 的三操作数形式原来是
+`push(src) → op(src, ext) → mov(dst, src) → pop(src)` 的微码：先临时改写 `src`，
+算完再还原。这带来两个问题：
+
+1. **源操作数必须可写**。0.60 引入的全局参数 `rand`/`cin*` 是只读的，
+   `mul cprt, rand, 10` 会直接报错；立即数和表达式结果同样是只读的，
+   连 `add r0, 5, 3` 也跑不了。
+2. **`dst == src` 时结果被还原**。`mov r0, 1` 后执行 `add r0, r0, 5`，
+   微码最后一步 `pop` 把 `r0` 还原成 1，得到 1 而不是 6。
+
+现在改为「复制一份可写的 `src` → 在副本上执行两操作数运算 → `mov` 到 `dst`」，
+不再触碰 `src`。Rust 实现（`nsasm-rs` 的 `arith`/`cat`/`dog`）本来就是
+`dst = src op ext` 的做法，两边语义因此一致。回归用例加在 `tests/ops.ns`。

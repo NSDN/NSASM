@@ -711,6 +711,49 @@ arg3 is 0
 
 若两个操作数存储的字符串相匹配, 状态寄存器 `stateReg` 将被置 `0`, 否则置 `1`
 
+#### 8.9 三操作数（重载）形式
+
+多数值操作指令提供「三操作数」重载，语义如下：
+
+| 形式 | 语义 |
+|---|---|
+| `add/sub/mul/div/mod/and/or/xor/shl/shr dst, src, ext` | `dst = src <运算> ext` |
+| `cat/dog dst, src, ext` | `dst = src` 与 `ext` 做字符串/映射的合并或删除 |
+| `mov dst, src, ext` | `dst = src; src = ext`（这一条会写 `src`） |
+| `put map, key, val` | 向 `map` 写入，不需要先 `use` |
+| `get map, dst, key` | 从 `map` 读取，不需要先 `use` |
+| `prt a, b, c` | 三个操作数拼接后输出一行 |
+
+`dst = src <运算> ext` 这一族的**源操作数只需要可读**，不会被临时改写。
+因此立即数、表达式结果、只读全局参数（`rand`/`cini` 等）都可以直接作为源操作数：
+
+```
+mul r0, 7, 6            ; r0 = 42（源是立即数）
+mul r0, 1 + 2, 10       ; r0 = 30（源是表达式）
+mul cprt, rand, 10      ; rand * 10 直接送到 cprt 输出
+mul r3, r3, 6           ; dst 与 src 相同时结果也正确（42）
+```
+
+`mov dst, src, ext` 是例外：它按定义会写 `src`（等价于 `dst = src; src = ext`）。
+
+#### 8.10 全局参数（虚拟寄存器）
+
+这些名字可以直接当操作数使用，由 `paramList` 注册，不占用 `r0`–`rN`：
+
+| 名称 | 类型 | 说明 |
+|---|---|---|
+| `rand` | float | `[0, 1)` 的随机浮点数 |
+| `tid` | int | 当前线程 id |
+| `arg` | 任意 | `par` 当前线程的参数；非 `par` 线程里是字符串 `"null"` |
+| `null` | str | 字符串 `"null"` |
+| `cin` / `cins` | str | 读一行输入作为字符串 |
+| `cinc` | char | 读一行输入，取首字符 |
+| `cini` / `cinf` | int / float | 读一行输入，按表达式解析为整数 / 浮点数 |
+| `cout` / `cprt` | — | 输出接收器：作为**目标操作数**时把写入的值输出（`cout` 不带换行，`cprt` 带换行） |
+
+`cout`/`cprt` 只有在被写入时有意义，例如 `mul cprt, rand, 10`；
+其余全局参数都是只读的，作目标操作数会报错。
+
 ***
 ### 9 运行原理
 
