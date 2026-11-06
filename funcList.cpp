@@ -17,7 +17,7 @@ namespace NSASM {
 		funcList["var"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
 			if (heapManager[dst->s].type != RegType::REG_STR)
@@ -28,7 +28,7 @@ namespace NSASM {
 		funcList["int"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_INT) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -39,7 +39,7 @@ namespace NSASM {
 		funcList["char"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_CHAR) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -50,7 +50,7 @@ namespace NSASM {
 		funcList["float"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_FLOAT) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -61,7 +61,7 @@ namespace NSASM {
 		funcList["str"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_STR) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -72,7 +72,7 @@ namespace NSASM {
 		funcList["code"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -83,7 +83,7 @@ namespace NSASM {
 		funcList["map"] = $OP_{
 			if (src == nullptr) return Result::RES_ERR;
 			if (dst == nullptr) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_VAR)) return Result::RES_ERR;
+			if (!isDeclarableName(dst->s)) return Result::RES_ERR;
 			if (heapManager.count(dst->s) != 0) return Result::RES_ERR;
 			if (src->type != RegType::REG_MAP) return Result::RES_ERR;
 			heapManager[dst->s] = *src;
@@ -331,7 +331,8 @@ namespace NSASM {
 			} else {
 				if (dst == nullptr) return Result::RES_ERR;
 				if (dst->type == RegType::REG_CODE) {
-					Register* reg = eval(src);
+					// 原来是 eval(src)（这里 src 必为 null），导致 prt <代码段> 永远失败
+					Register* reg = eval(dst);
 					if (reg == nullptr) return Result::RES_ERR;
 					*reg >> s; if (reg->gcFlag) delete reg;
 				} else *dst >> s;
@@ -357,6 +358,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res =  calc(dst, reg, '+');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -392,6 +394,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '-');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -427,6 +430,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '*');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -450,6 +454,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '/');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -473,6 +478,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '%');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -496,6 +502,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '&');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -519,6 +526,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '|');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -542,6 +550,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '^');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -572,6 +581,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '<');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -595,6 +605,7 @@ namespace NSASM {
 			if (dst->readOnly) return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				Result res = calc(dst, reg, '>');
 				if (reg != nullptr) if (reg->gcFlag) delete reg;
 				return res;
@@ -608,6 +619,7 @@ namespace NSASM {
 				return Result::RES_ERR;
 			if (src->type == RegType::REG_CODE) {
 				Register* reg = eval(src);
+				if (reg == nullptr) return Result::RES_ERR;
 				if (funcList["sub"](&stateReg, reg, nullptr) == Result::RES_ERR) {
 					if (reg != nullptr) if (reg->gcFlag) delete reg;
 					return Result::RES_ERR;
@@ -625,6 +637,7 @@ namespace NSASM {
 			if (dst == nullptr) return Result::RES_ERR;
 			if (dst->type == RegType::REG_CODE) {
 				Register* reg = eval(dst);
+				if (reg == nullptr) return Result::RES_ERR;
 				if (funcList["mov"](&stateReg, reg, nullptr) == Result::RES_ERR) {
 					if (reg != nullptr) if (reg->gcFlag) delete reg;
 					return Result::RES_ERR;
@@ -642,244 +655,6 @@ namespace NSASM {
 			return Result::RES_OK;
 		};
 		
-		funcList["jmp"] = $OP_{
-			if (src != nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (dst->type != RegType::REG_STR) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_TAG)) return Result::RES_ERR;
-			for (int seg = 0; seg < segs.size(); seg++) {
-				if (code[segs[seg]].empty()) continue;
-				for (int line = 0; line < code[segs[seg]].size(); line++) {
-					if (code[segs[seg]][line] == dst->s) {
-						tmpSeg = seg; tmpCnt = line;
-						return Result::RES_OK;
-					}
-				}
-			}
-			return Result::RES_ERR;
-		};
-
-		funcList["jz"] = $OP_{
-			stringstream ss; ss.clear();
-			string s; stateReg >> s;
-			ss << s; float f = 0.0F; ss >> f;
-			if (f == 0.0F) {
-				return funcList["jmp"](dst, src, nullptr);
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["jnz"] = $OP_{
-			stringstream ss; ss.clear();
-			string s; stateReg >> s;
-			ss << s; float f = 0.0F; ss >> f;
-			if (f != 0.0F) {
-				return funcList["jmp"](dst, src, nullptr);
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["jg"] = $OP_{
-			stringstream ss; ss.clear();
-			string s; stateReg >> s;
-			ss << s; float f = 0.0F; ss >> f;
-			if (f > 0.0F) {
-				return funcList["jmp"](dst, src, nullptr);
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["jl"] = $OP_{
-			stringstream ss; ss.clear();
-			string s; stateReg >> s;
-			ss << s; float f = 0.0F; ss >> f;
-			if (f < 0.0F) {
-				return funcList["jmp"](dst, src, nullptr);
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["loop"] = $OP_{
-			if (dst == nullptr) return Result::RES_ERR;
-			if (src == nullptr) return Result::RES_ERR;
-			if (ext == nullptr) return Result::RES_ERR;
-
-			if (dst->type != RegType::REG_INT) return Result::RES_ERR;
-			if (dst->readOnly) return Result::RES_ERR;
-			if (src->type != RegType::REG_INT) return Result::RES_ERR;
-			if (ext->type != RegType::REG_STR) return Result::RES_ERR;
-			if (!verifyWord(ext->s, WordType::WD_TAG)) return Result::RES_ERR;
-
-			if (src->n.i > 0) {
-				if (funcList["inc"](dst, nullptr, nullptr) == Result::RES_ERR)
-					return Result::RES_ERR;
-			} else {
-				if (funcList["dec"](dst, nullptr, nullptr) == Result::RES_ERR)
-					return Result::RES_ERR;
-			}
-			if (funcList["cmp"](dst, src, nullptr) == Result::RES_ERR)
-				return Result::RES_ERR;
-			if (funcList["jnz"](ext, nullptr, nullptr) == Result::RES_ERR)
-				return Result::RES_ERR;
-			
-			return Result::RES_OK;
-		};
-
-		funcList["end"] = $OP_{
-			if (dst == nullptr && src == nullptr)
-				return Result::RES_ETC;
-			return Result::RES_ERR;
-		};
-
-		funcList["ret"] = $OP_{
-			if (src == nullptr) {
-				if (dst != nullptr) prevDstReg = *dst;
-				else prevDstReg = regGroup[0];
-				return Result::RES_ETC;
-			}
-			return Result::RES_ERR;
-		};
-
-		funcList["nop"] = $OP_{
-			if (dst == nullptr && src == nullptr)
-				return Result::RES_OK;
-			return Result::RES_ERR;
-		};
-
-		funcList["rst"] = $OP_{
-			if (dst == nullptr && src == nullptr) {
-				tmpSeg = 0; tmpCnt = 0;
-				return Result::RES_OK;
-			}
-			return Result::RES_ERR;
-		};
-
-		funcList["run"] = $OP_{
-			if (src != nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (dst->type != RegType::REG_STR) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_SEG)) return Result::RES_ERR;
-			for (int seg = 0; seg < segs.size(); seg++) {
-				if (segs[seg] == dst->s) {
-					tmpSeg = seg; tmpCnt = 0;
-					return Result::RES_OK;
-				}
-			}
-			return Result::RES_ERR;
-		};
-
-		funcList["call"] = $OP_{
-			if (src != nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (dst->type != RegType::REG_STR) return Result::RES_ERR;
-			if (!verifyWord(dst->s, WordType::WD_SEG)) return Result::RES_ERR;
-			for (int seg = 0; seg < segs.size(); seg++) {
-				if (segs[seg] == dst->s) {
-					tmpSeg = seg; tmpCnt = 0;
-					backupReg.push(progSeg);
-					backupReg.push(progCnt);
-					return Result::RES_OK;
-				}
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["ld"] = $OP_{
-			if (src != nullptr) return Result::RES_ERR;
-			if (dst == nullptr) return Result::RES_ERR;
-			if (dst->type != RegType::REG_STR && dst->type != RegType::REG_CODE)
-				return Result::RES_ERR;
-
-			string path;
-			if (dst->type == RegType::REG_CODE) {
-				Register* reg = eval(dst);
-				if (reg == nullptr) return Result::RES_ERR;
-				if (reg->type != RegType::REG_STR) {
-					if (reg->gcFlag) delete reg;
-					return Result::RES_ERR;
-				}
-				path = reg->s;
-				if (reg->gcFlag) delete reg;
-			} else path = dst->s;
-
-			string code = Util::read(path);
-			if (code == nulstr) return Result::RES_ERR;
-			auto segs = Util::getSegments(code);
-			if (appendCode(segs) == Result::RES_ERR) {
-				Util::print("At file: " + path + "\n");
-				return Result::RES_ERR;
-			}
-			return Result::RES_OK;
-		};
-
-		funcList["eval"] = $OP_{
-			if (dst == nullptr) return Result::RES_ERR;
-
-			Register* reg;
-			if (src == nullptr) reg = eval(dst);
-			else {
-				if (dst->readOnly) return Result::RES_ERR;
-				reg = eval(src);
-				*dst = *reg;
-			}
-			if (reg != nullptr) if (reg->gcFlag) delete reg;
-
-			return Result::RES_OK;
-		};
-
-	#ifdef USE_MULTITHREAD
-		funcList["par"] = $OP_{
-			if (dst == nullptr) return Result::RES_ERR;
-			if (src == nullptr) return Result::RES_ERR;
-			if (ext == nullptr) return Result::RES_ERR;
-
-			if (dst->readOnly) return Result::RES_ERR;
-			if (src->type != RegType::REG_CODE) return Result::RES_ERR;
-			if (ext->type != RegType::REG_MAP) return Result::RES_ERR;
-
-			auto map = ext->m;
-			if (map.size() != 0) {
-				int cnt = map.size();
-				auto code = Util::getSegments(src->s);
-				vector<Register> keys;
-				for (auto it = map.begin(); it != map.end(); it++)
-					keys.push_back(it->first);
-
-				vector<thread> threads;
-				SafePool<NSASM*> runnerPool;
-				SafePool<Register> outputPool;
-				for (int i = 0; i < cnt; i++) {
-					NSASM* core = instance(*this, code);
-					core->setArgument(&map[keys[i]]);
-					runnerPool.add(core);
-				}
-				for (int i = 0; i < cnt; i++)
-					threads.push_back(
-						thread([&](int index) -> void {
-							NSASM* core = runnerPool[index];
-							Register reg(*(core->run()));
-							outputPool.insert(index, reg);
-						}, i)
-					);
-
-				for (int i = 0; i < cnt; i++)
-					threads[i].join();
-				while (outputPool.count() < cnt)
-					funcList["nop"](nullptr, nullptr, nullptr);
-
-				for (int i = 0; i < cnt; i++)
-					delete runnerPool[i];
-
-				dst->type = RegType::REG_MAP;
-				dst->readOnly = false;
-				dst->m.clear();
-				for (int i = 0; i < cnt; i++)
-					dst->m[keys[i]] = outputPool[i];
-			}
-
-			return Result::RES_OK;
-		};
-	#endif
 
 		funcList["use"] = $OP_{
 			if (src != nullptr) return Result::RES_ERR;
@@ -903,6 +678,10 @@ namespace NSASM {
 			if (dst == nullptr) return Result::RES_ERR;
 			if (useReg == nullptr) return Result::RES_ERR;
 			if (useReg->type != RegType::REG_MAP) return Result::RES_ERR;
+			// 映射不能当键：Register::operator< 对所有 map 都判「相等」，
+			// 允许的话会静默覆盖前一个键，属于丢数据，这里直接拒绝。
+			// 只拒绝 dst（键）：映射作为「值」是合法的（嵌套映射）。
+			if (dst->type == RegType::REG_MAP) return Result::RES_ERR;
 			if (dst->type == RegType::REG_CODE) {
 				Register* reg = eval(dst);
 				if (reg == nullptr) return Result::RES_ERR;

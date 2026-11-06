@@ -1,1 +1,1 @@
-g++ -std=c++11 -static-libstdc++ -static-libgcc -O3 -B ./ *.cpp -o nsasm
+g++ -std=c++17 -static-libstdc++ -static-libgcc -O3 -B ./ *.cpp ng/*.cpp -o nsasm

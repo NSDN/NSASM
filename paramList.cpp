@@ -140,7 +140,11 @@ namespace NSASM {
                 ostringstream oss;
                 oss << this_thread::get_id();
                 string stid = oss.str();
-                int tid = stoi(stid);
+                // 原实现是 stoi(stid)。libc++/bionic 下线程 id 是 pthread 句柄
+                // （形如 "500151987392"），远超 int 范围，stoi 抛 out_of_range，
+                // 在线程函数内未捕获 -> std::terminate。这里先按 64 位解析再截断，
+                // 仅用于显示：真正该做的是由 par 把循环下标传进来。
+                int tid = static_cast<int>(stoll(stid));
 
                 Register* res = new Register();
                 res->type = RegType::REG_INT;
