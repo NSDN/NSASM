@@ -224,67 +224,7 @@ sh tests/run.sh                              # 新引擎
 sh tests/run.sh ~/build/nsasm/nsasm-legacy   # 旧引擎
 ```
 
-## 10. Rust 移植（`rs/`）
+## 10. Rust 移植
 
-`rs/` 是同一语义的 Rust 实现，**用同一套 48 个用例验收，输出与 C++ 版逐字节一致**：
-
-```
-$ cd rs && bash build.sh
-== cargo build (release)          # 零警告
-== 单元测试 + 扩展性集成测试       # 14 单元 + 7 集成
-== 一致性测试（共用 tests/run.sh）  # 通过 48，失败 0
-```
-
-### 10.1 分层映射
-
-| Rust | 职责 | C++ |
-|---|---|---|
-| `value.rs` | 值模型 + 映射键排序（数值按值、字符串按内容） | `Register` + `operator<` |
-| `front.rs` | 词法 → AST → 语法 + 宏展开 | `ng/Front.{h,cpp}` |
-| `vm.rs` | 执行循环、操作数解析、控制流、`eval`/`par`/`ld` | `ng/Interp.cpp` |
-| `ops.rs` | 指令表 + 虚拟寄存器表 | `funcList.cpp` / `paramList.cpp` |
-| `host.rs` | I/O 宿主 trait | `Util::I()` 的回调 |
-| `main.rs` | CLI（退出码 1/2） | `Launcher.cpp` |
-
-字符串统一用 `Vec<u8>`：C++ 的 `std::string` 是字节串，按 `char` 处理会破坏
-UTF-8 和 `len` 的字节语义。
-
-### 10.2 扩展性（移植时的硬约束）
-
-C++ 版「加一条指令 = 一个 lambda」的体验必须保留，所以 Rust 里把扩展点做成了
-**公开 API**，而不是私有实现细节：
-
-```rust
-let mut vm = Vm::new(Conf::default());
-vm.register_op("gfx", |vm, a| { /* 指令体 */ Ok(()) });   // 1. 加指令
-vm.register_param("answer", |_vm| Value::Int(42));          // 2. 加虚拟寄存器
-vm.set_host(Box::new(MyHost));                              // 3. 换 I/O
-vm.register_op("skip", |vm, _a| vm.jump_to("[end"]));       // 4. 自定义控制流
-```
-
-- 指令签名 `fn(&mut Vm, &Args) -> Result<(), String>`；`Args` 里是解析好的
-  `dst/src/ext`，每个 `Slot` 带当前值、可写性与写回目标。
-- 内置指令走同一条路：`ops.rs` 里一个函数 + `install_builtins` 一行注册。
-- `jump_to` / `call_seg` / `halt` / `labels` 公开，所以循环类指令不需要改解释器。
-- `Host` trait 取代了「往单例塞 lambda」，`par` 的线程共享同一宿主（输出天然串行）。
-
-`rs/tests/extension.rs` 的 7 个用例就是这四条的验收，全部只用公开 API。
-
-### 10.3 与 C++ 的差异（不影响语义）
-
-| 项目 | C++ | Rust |
-|---|---|---|
-| 浮点打印 | `%g` | 去掉多余 `.0`；`2.5`/`3.25` 等一致，极端指数形式可能不同 |
-| `tid` | pthread 句柄数值 | 线程局部递增编号 |
-| I/O 扩展 | 单例上的 `std::function` | `Host` trait + `Arc<Mutex<..>>` |
-| 值传递 | 结构体拷贝 | `read()` 克隆（大映射传参有成本，待写时复制） |
-
-### 10.4 性能
-
-同机 aarch64、Release：`mat.ns` C++ 5.4–5.9 ms / Rust 5.9–7.3 ms；
-`test.ns`（宏 + 映射 + 16 线程）两者 ~6–7 ms，同一量级。
-
-### 10.5 构建注意
-
-- `CARGO_TARGET_DIR` 放 `$HOME`：sdcard 是 `noexec`，产物在那里跑不起来。
-- 不引入任何外部 crate，`cargo build --offline` 即可，不需要联网。
+Rust 实现已拆分到独立仓库 `nsasm-rs`，移植记录（分层映射、扩展性硬约束、
+与 C++ 的差异、性能、构建注意）见该仓库的 `DESIGN.md`。

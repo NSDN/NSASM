@@ -803,16 +803,7 @@ sh tests/run.sh          # 或 bash build-android.sh --test
 
 #### 12.5 Rust 实现
 
-`rs/` 是同一语义的 Rust 实现，用**同一套 48 个用例**验收：
-
-```sh
-cd rs && bash build.sh
-# 零警告构建 + 14 单元测试 + 7 个扩展性集成测试 + 48/48 一致性测试
-```
-
-两个实现的输出逐字节一致。Rust 版把 C++ 的扩展点（`funcList`/`paramList`/I/O 回调）
-做成了公开 API：`register_op` / `register_param` / `set_host`，控制流辅助
-（`jump_to`/`call_seg`/`halt`）也开放，详见 [rs/README.md](rs/README.md)
-和 [DESIGN.md](DESIGN.md) 第 10 节。
+Rust 移植已拆分到独立仓库 `nsasm-rs`，分层映射、扩展 API、与 C++ 的差异、
+性能与构建注意见该仓库的 `README.md` 与 `DESIGN.md`。
 ***
 #### Copyright © NSDN 2014 - 2019
