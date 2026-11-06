@@ -1,4 +1,4 @@
-rem "位运算 / 移位 / not / test / 三操作数形式 / out 调试地址"
+rem "位运算 / 移位 / not / test / 三操作数形式（源操作数只读也可） / out 调试地址"
 <main> {
 	mov r0, 0x0F
 	and r0, 0x33
@@ -31,5 +31,21 @@ rem "位运算 / 移位 / not / test / 三操作数形式 / out 调试地址"
 	prt r6
 	out 0xFF, r5
 	prt r5, r6, "!"
+	rem "三操作数：源操作数只需可读、不被临时改写；dst == src 时结果正确"
+	mov r7, 7
+	mul r7, r7, 6
+	prt r7
+	mul r8, 7, 6
+	prt r8
+	add r9, 1 + 2, 3
+	prt r9
+	and r10, 0x0F, 0x33
+	prt r10
+	mul r11, rand, 0
+	prt r11
+	cat r12, "ab", "cd"
+	prt r12
+	dog r13, "abcd", "cd"
+	prt r13
 	end
 }
