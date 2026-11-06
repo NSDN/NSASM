@@ -208,6 +208,8 @@ namespace NSASM {
 		Result calc(float* dst, float src, char type);
 		Result calc(Register* dst, int src, char type);
 		Result calc(Register* dst, Register* src, char type);
+		// 三操作数（重载）形式 dst = src op ext：src 只读，计算在副本上进行
+		Result triOp(const string& op, Register* dst, Register* src, Register* ext);
 
 	protected:
 		Register* useReg = nullptr;
