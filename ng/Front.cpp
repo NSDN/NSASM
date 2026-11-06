@@ -98,6 +98,36 @@ LexResult lex(const std::string& src) {
 		}
 		if (c == ' ' || c == '\t' || c == '\r') { i++; col++; continue; }
 
+		// 注释：// 到行尾；/* ... */ 可跨行（不嵌套）
+		// 注释按空白处理，但块注释内部的换行保留为 Newline token，
+		// 避免把注释前后的两条语句粘在一起。
+		if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+			i += 2; col += 2;
+			while (i < src.size() && src[i] != '\n') { i++; col++; }
+			continue;
+		}
+		if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+			const int cLine = line, cCol = col;
+			i += 2; col += 2;
+			bool closed = false;
+			while (i < src.size()) {
+				if (src[i] == '*' && i + 1 < src.size() && src[i + 1] == '/') {
+					i += 2; col += 2; closed = true; break;
+				}
+				if (src[i] == '\n') {
+					Token nl; nl.kind = Tok::Newline; nl.line = line; nl.col = col;
+					r.toks.push_back(nl);
+					i++; line++; col = 1;
+				} else { i++; col++; }
+			}
+			if (!closed) {
+				line = cLine; col = cCol;  // 让诊断指向注释开头
+				fail("块注释没有结束的 */");
+				return r;
+			}
+			continue;
+		}
+
 		const int tline = line, tcol = col;
 		auto push = [&](Tok k, const std::string& text) {
 			Token t; t.kind = k; t.text = text; t.line = tline; t.col = tcol;
